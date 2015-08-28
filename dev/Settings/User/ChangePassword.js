@@ -9,8 +9,9 @@
 
 		Enums = require('Common/Enums'),
 		Utils = require('Common/Utils'),
+		Translator = require('Common/Translator'),
 
-		Remote = require('Storage/User/Remote')
+		Remote = require('Remote/User/Ajax')
 	;
 
 	/**
@@ -53,7 +54,7 @@
 			if (this.newPassword() !== this.newPassword2())
 			{
 				this.passwordMismatch(true);
-				this.errorDescription(Utils.i18n('SETTINGS_CHANGE_PASSWORD/ERROR_PASSWORD_MISMATCH'));
+				this.errorDescription(Translator.i18n('SETTINGS_CHANGE_PASSWORD/ERROR_PASSWORD_MISMATCH'));
 			}
 			else
 			{
@@ -102,6 +103,8 @@
 
 			this.passwordUpdateSuccess(true);
 			this.currentPassword.error(false);
+
+			require('App/User').setClientSideToken(oData.Result);
 		}
 		else
 		{
@@ -111,8 +114,8 @@
 			}
 
 			this.passwordUpdateError(true);
-			this.errorDescription(oData && oData.ErrorCode ? Utils.getNotification(oData.ErrorCode) :
-				Utils.getNotification(Enums.Notification.CouldNotSaveNewPassword));
+			this.errorDescription(oData && oData.ErrorCode ? Translator.getNotification(oData.ErrorCode) :
+				Translator.getNotification(Enums.Notification.CouldNotSaveNewPassword));
 		}
 	};
 

@@ -9,10 +9,14 @@
 
 		Enums = require('Common/Enums'),
 		Utils = require('Common/Utils'),
+		Translator = require('Common/Translator'),
 
 		Settings = require('Storage/Settings'),
-		Data = require('Storage/Admin/Data'),
-		Remote = require('Storage/Admin/Remote')
+
+		AppStore = require('Stores/Admin/App'),
+		PluginStore = require('Stores/Admin/Plugin'),
+		
+		Remote = require('Remote/Admin/Ajax')
 	;
 
 	/**
@@ -22,12 +26,13 @@
 	{
 		this.enabledPlugins = ko.observable(!!Settings.settingsGet('EnabledPlugins'));
 
-		this.pluginsError = ko.observable('');
+		this.plugins = PluginStore.plugins;
+		this.pluginsError = PluginStore.plugins.error;
 
-		this.plugins = Data.plugins;
+		this.community = RL_COMMUNITY || AppStore.community();
 
 		this.visibility = ko.computed(function () {
-			return Data.plugins.loading() ? 'visible' : 'hidden';
+			return PluginStore.plugins.loading() ? 'visible' : 'hidden';
 		}, this);
 
 		this.onPluginLoadRequest = _.bind(this.onPluginLoadRequest, this);
@@ -75,7 +80,7 @@
 
 	PluginsAdminSettings.prototype.onShow = function ()
 	{
-		this.pluginsError('');
+		PluginStore.plugins.error('');
 		require('App/Admin').reloadPluginList();
 	};
 
@@ -95,11 +100,11 @@
 			{
 				if (Enums.Notification.UnsupportedPluginPackage === oData.ErrorCode && oData.ErrorMessage && '' !== oData.ErrorMessage)
 				{
-					this.pluginsError(oData.ErrorMessage);
+					PluginStore.plugins.error(oData.ErrorMessage);
 				}
 				else
 				{
-					this.pluginsError(Utils.getNotification(oData.ErrorCode));
+					PluginStore.plugins.error(Translator.getNotification(oData.ErrorCode));
 				}
 			}
 		}

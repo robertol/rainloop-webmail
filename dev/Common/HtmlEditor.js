@@ -31,6 +31,8 @@
 
 		this.resize = _.throttle(_.bind(this.resize, this), 100);
 
+		this.__inited = false;
+
 		this.init();
 	}
 
@@ -64,12 +66,16 @@
 
 	/**
 	 * @param {string} sSignature
+	 * @param {bool} bHtml
+	 * @param {bool} bInsertBefore
 	 */
-	HtmlEditor.prototype.setSignature = function (sSignature)
+	HtmlEditor.prototype.setSignature = function (sSignature, bHtml, bInsertBefore)
 	{
 		if (this.editor)
 		{
 			this.editor.execCommand('insertSignature', {
+				'isHtml': bHtml,
+				'insertBefore': bInsertBefore,
 				'signature': sSignature
 			});
 		}
@@ -92,55 +98,109 @@
 	};
 
 	/**
-	 * @param {boolean=} bWrapIsHtml = false
+	 * @param {string} sText
 	 * @return {string}
 	 */
-	HtmlEditor.prototype.getData = function (bWrapIsHtml)
+	HtmlEditor.prototype.clearSignatureSigns = function (sText)
 	{
-		if (this.editor)
-		{
-			if ('plain' === this.editor.mode && this.editor.plugins.plain && this.editor.__plain)
-			{
-				return this.editor.__plain.getRawData();
-			}
-
-			return bWrapIsHtml ?
-				'<div data-html-editor-font-wrapper="true" style="font-family: arial, sans-serif; font-size: 13px;">' +
-					this.editor.getData() + '</div>' : this.editor.getData();
-		}
-
-		return '';
+		return sText.replace(/(\u200C|\u0002)/g, '');
 	};
 
-	HtmlEditor.prototype.modeToggle = function (bPlain)
+	/**
+	 * @param {boolean=} bWrapIsHtml = false
+	 * @param {boolean=} bClearSignatureSigns = false
+	 * @return {string}
+	 */
+	HtmlEditor.prototype.getData = function (bWrapIsHtml, bClearSignatureSigns)
+	{
+		var sResult = '';
+		if (this.editor)
+		{
+			try
+			{
+				if ('plain' === this.editor.mode && this.editor.plugins.plain && this.editor.__plain)
+				{
+					sResult = this.editor.__plain.getRawData();
+				}
+				else
+				{
+					sResult =  bWrapIsHtml ?
+						'<div data-html-editor-font-wrapper="true" style="font-family: arial, sans-serif; font-size: 13px;">' +
+							this.editor.getData() + '</div>' : this.editor.getData();
+				}
+			}
+			catch (e) {}
+
+			if (bClearSignatureSigns)
+			{
+				sResult = this.clearSignatureSigns(sResult);
+			}
+		}
+
+		return sResult;
+	};
+
+	/**
+	 * @param {boolean=} bWrapIsHtml = false
+	 * @param {boolean=} bClearSignatureSigns = false
+	 * @return {string}
+	 */
+	HtmlEditor.prototype.getDataWithHtmlMark = function (bWrapIsHtml, bClearSignatureSigns)
+	{
+		return (this.isHtml() ? ':HTML:' : '') + this.getData(bWrapIsHtml, bClearSignatureSigns);
+	};
+
+	HtmlEditor.prototype.modeToggle = function (bPlain, bResize)
 	{
 		if (this.editor)
 		{
-			if (bPlain)
-			{
-				if ('plain' === this.editor.mode)
+			try {
+				if (bPlain)
 				{
-					this.editor.setMode('wysiwyg');
+					if ('plain' === this.editor.mode)
+					{
+						this.editor.setMode('wysiwyg');
+					}
 				}
-			}
-			else
-			{
-				if ('wysiwyg' === this.editor.mode)
+				else
 				{
-					this.editor.setMode('plain');
+					if ('wysiwyg' === this.editor.mode)
+					{
+						this.editor.setMode('plain');
+					}
 				}
-			}
+			} catch(e) {}
 
-			this.resize();
+			if (bResize)
+			{
+				this.resize();
+			}
+		}
+	};
+
+	HtmlEditor.prototype.setHtmlOrPlain = function (sText, bFocus)
+	{
+		if (':HTML:' === sText.substr(0, 6))
+		{
+			this.setHtml(sText.substr(6), bFocus);
+		}
+		else
+		{
+			this.setPlain(sText, bFocus);
 		}
 	};
 
 	HtmlEditor.prototype.setHtml = function (sHtml, bFocus)
 	{
-		if (this.editor)
+		if (this.editor && this.__inited)
 		{
 			this.modeToggle(true);
-			this.editor.setData(sHtml);
+
+			sHtml = sHtml.replace(/<p[^>]*><\/p>/ig, '');
+
+			try {
+				this.editor.setData(sHtml);
+			} catch (e) {}
 
 			if (bFocus)
 			{
@@ -151,7 +211,7 @@
 
 	HtmlEditor.prototype.setPlain = function (sPlain, bFocus)
 	{
-		if (this.editor)
+		if (this.editor && this.__inited)
 		{
 			this.modeToggle(false);
 			if ('plain' === this.editor.mode && this.editor.plugins.plain && this.editor.__plain)
@@ -160,7 +220,9 @@
 			}
 			else
 			{
-				this.editor.setData(sPlain);
+				try {
+					this.editor.setData(sPlain);
+				} catch (e) {}
 			}
 
 			if (bFocus)
@@ -172,7 +234,7 @@
 
 	HtmlEditor.prototype.init = function ()
 	{
-		if (this.$element && this.$element[0])
+		if (this.$element && this.$element[0] && !this.editor)
 		{
 			var
 				self = this,
@@ -185,9 +247,9 @@
 						bBiti = !!Settings.settingsGet('AllowHtmlEditorBitiButtons')
 					;
 
-					if ((bSource || !bBiti) && !oConfig.toolbarGroups.__SourceInited)
+					if ((bSource || !bBiti) && !oConfig.toolbarGroups.__cfgInited)
 					{
-						oConfig.toolbarGroups.__SourceInited = true;
+						oConfig.toolbarGroups.__cfgInited = true;
 
 						if (bSource)
 						{
@@ -198,14 +260,10 @@
 						{
 							oConfig.removePlugins += (oConfig.removePlugins ? ',' : '')  + 'bidi';
 						}
-						else
-						{
-							oConfig.removeButtons = oConfig.removeButtons.replace(',bidi', '');
-						}
 					}
 
 					oConfig.enterMode = window.CKEDITOR.ENTER_BR;
-					oConfig.shiftEnterMode = window.CKEDITOR.ENTER_BR;
+					oConfig.shiftEnterMode = window.CKEDITOR.ENTER_P;
 
 					oConfig.language = Globals.oHtmlEditorLangsMap[sLanguage] || 'en';
 					if (window.CKEDITOR.env)
@@ -240,18 +298,26 @@
 						self.focusTrigger();
 					});
 
-					if (self.fOnReady)
-					{
-						self.editor.on('instanceReady', function () {
+					self.editor.on('instanceReady', function () {
 
-							self.editor.setKeystroke(window.CKEDITOR.CTRL + 65 /* A */, 'selectAll');
-							self.editor.editable().addClass('cke_enable_context_menu');
+						if (self.editor.removeMenuItem)
+						{
+							self.editor.removeMenuItem('cut');
+							self.editor.removeMenuItem('copy');
+							self.editor.removeMenuItem('paste');
+						}
 
+						self.__resizable = true;
+						self.__inited = true;
+
+						self.resize();
+
+						if (self.fOnReady)
+						{
 							self.fOnReady();
-							self.__resizable = true;
-							self.resize();
-						});
-					}
+						}
+
+					});
 				}
 			;
 
@@ -270,7 +336,9 @@
 	{
 		if (this.editor)
 		{
-			this.editor.focus();
+			try {
+				this.editor.focus();
+			} catch (e) {}
 		}
 	};
 
@@ -278,7 +346,9 @@
 	{
 		if (this.editor)
 		{
-			this.editor.focusManager.blur(true);
+			try {
+				this.editor.focusManager.blur(true);
+			} catch (e) {}
 		}
 	};
 
@@ -286,11 +356,19 @@
 	{
 		if (this.editor && this.__resizable)
 		{
-			try
-			{
+			try {
 				this.editor.resize(this.$element.width(), this.$element.innerHeight());
-			}
-			catch (e) {}
+			} catch (e) {}
+		}
+	};
+
+	HtmlEditor.prototype.setReadOnly = function (bValue)
+	{
+		if (this.editor)
+		{
+			try {
+				this.editor.setReadOnly(!!bValue);
+			} catch (e) {}
 		}
 	};
 
@@ -298,7 +376,6 @@
 	{
 		this.setHtml('', bFocus);
 	};
-
 
 	module.exports = HtmlEditor;
 

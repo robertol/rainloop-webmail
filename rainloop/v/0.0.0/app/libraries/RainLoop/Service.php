@@ -125,7 +125,7 @@ class Service
 
 		if ($bAdmin && !$this->oActions->Config()->Get('security', 'allow_admin_panel', true))
 		{
-			echo $this->oActions->ErrorTemplates('Access Denied.',
+			echo $this->oServiceActions->ErrorTemplates('Access Denied.',
 				'Access to the RainLoop Webmail Admin Panel is not allowed!', true);
 
 			return $this;
@@ -150,8 +150,21 @@ class Service
 
 		if ($bIndex)
 		{
+			@\header('Content-Security-Policy:');
+			@\header_remove('Content-Security-Policy');
+
 			@header('Content-Type: text/html; charset=utf-8');
 			$this->oHttp->ServerNoCache();
+
+			if (!@\is_dir(APP_DATA_FOLDER_PATH) || !@\is_writable(APP_DATA_FOLDER_PATH))
+			{
+				echo $this->oServiceActions->ErrorTemplates(
+					'Permission denied!',
+					'RainLoop Webmail cannot access to the data folder "'.APP_DATA_FOLDER_PATH.'"'
+				);
+
+				return $this;
+			}
 
 			$aTemplateParameters = $this->indexTemplateParameters($bAdmin);
 
@@ -180,11 +193,23 @@ class Service
 
 			$sResult .= '<!--';
 			$sResult .= ' [version:'.APP_VERSION;
+
+			if ($this->oActions->IsOpen())
+			{
+				$sResult .= '][AGPLv3';
+			}
+
 			$sResult .= '][time:'.\substr(\microtime(true) - APP_START, 0, 6);
 			$sResult .= '][cached:'.($bCached ? 'true' : 'false');
-			$sResult .= '][hash:'.$aTemplateParameters['{{BaseHash}}'];
-			$sResult .= '][session:'.\md5(\RainLoop\Utils::GetShortToken());
-			$sResult .= '] -->';
+//			$sResult .= '][hash:'.$aTemplateParameters['{{BaseHash}}'];
+//			$sResult .= '][session:'.\md5(\RainLoop\Utils::GetShortToken());
+
+			if (\RainLoop\Utils::IsOwnCloud())
+			{
+				$sResult .= '][owncloud:true';
+			}
+
+			$sResult .= '] //-->';
 		}
 
 		// Output result
@@ -196,27 +221,21 @@ class Service
 	}
 
 	/**
-	 * @param bool $bAdmin
+	 * @param bool $bAdmin = false
 	 *
 	 * @return array
 	 */
-	private function indexTemplateParameters($bAdmin)
+	private function indexTemplateParameters($bAdmin = false)
 	{
 		$sLanguage = 'en';
 		$sTheme = 'Default';
 
-		if (!$bAdmin)
-		{
-			list($sLanguage, $sTheme) = $this->oActions->GetLanguageAndTheme();
-		}
-
-		$sLanguage = $this->oActions->ValidateLanguage($sLanguage);
-		$sTheme = $this->oActions->ValidateTheme($sTheme);
+		list($sLanguage, $sTheme) = $this->oActions->GetLanguageAndTheme($bAdmin);
 
 		$bAppJsDebug = !!$this->oActions->Config()->Get('labs', 'use_app_debug_js', false);
 		$bAppCssDebug = !!$this->oActions->Config()->Get('labs', 'use_app_debug_css', false);
 
-		$sStaticPrefix = APP_WEB_STATIC_PATH;
+		$sStaticPrefix = \RainLoop\Utils::WebStaticPath();
 
 		$aData = array(
 			'Language' => $sLanguage,
@@ -247,14 +266,17 @@ class Service
 			'{{BaseAppOpenPgpScriptLink}}' => $aData['OpenPgpJsLink'],
 			'{{BaseAppMainCommonScriptLink}}' => $aData['AppJsCommonLink'],
 			'{{BaseAppMainScriptLink}}' => $aData['AppJsLink'],
-			'{{BaseDir}}' => \in_array($aData['Language'], array('ar', 'he', 'ur')) ? 'rtl' : 'ltr'
+			'{{BaseVersion}}' => APP_VERSION,
+			'{{BaseDir}}' => 'ltr'
+//			'{{BaseDir}}' => \in_array($aData['Language'], array('ar', 'he', 'ur')) ? 'rtl' : 'ltr'
 		);
 
 		$aTemplateParameters['{{BaseHash}}'] = \md5(
 			\implode('~', array(
+				$bAdmin ? '1' : '0',
 				\md5($this->oActions->Config()->Get('cache', 'index', '')),
 				$this->oActions->Plugins()->Hash(),
-				APP_WEB_PATH, APP_VERSION
+				\RainLoop\Utils::WebVersionPath(), APP_VERSION
 			)).
 			\implode('~', $aTemplateParameters)
 		);

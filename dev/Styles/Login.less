@@ -9,6 +9,7 @@
 		display: inline-block;
 		vertical-align: middle;
 		text-align: center;
+		perspective: 500px;
 
 		.descWrapper {
 
@@ -24,6 +25,9 @@
 			max-width: 450px;
 		}
 
+		.wrapper-parent {
+		}
+
 		.loginForm {
 			background-color: #efefef;
 			text-align: left;
@@ -31,6 +35,18 @@
 			margin: 0;
 			float: none;
 			width: 303px;
+		}
+
+		.loginWelcomeForm {
+			display: none;
+		}
+
+		.welcome-on {
+			display: block;
+		}
+
+		.welcome-off {
+			display: none;
 		}
 
 /*		.control-label {
@@ -43,7 +59,7 @@
 		}
 
 		.wrapper {
-			padding: 40px 40px 10px 40px;
+			padding: 40px 40px 12px 40px;
 		}
 
 		#recaptcha_image img {
@@ -59,7 +75,11 @@
 			}
 		}
 
-		.signMeLabel, .languageLabel {
+		.languageLabel {
+			margin-top: 5px;
+		}
+
+		.signMeLabel .e-checkbox {
 			margin-top: 5px;
 		}
 

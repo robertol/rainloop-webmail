@@ -16,9 +16,14 @@
 		Utils = require('Common/Utils'),
 		Selector = require('Common/Selector'),
 		Links = require('Common/Links'),
+		Translator = require('Common/Translator'),
 
-		Data = require('Storage/User/Data'),
-		Remote = require('Storage/User/Remote'),
+		SettingsStore = require('Stores/User/Settings'),
+		ContactStore = require('Stores/User/Contact'),
+
+		Settings = require('Storage/Settings'),
+
+		Remote = require('Remote/User/Ajax'),
 
 		EmailModel = require('Model/Email'),
 		ContactModel = require('Model/Contact'),
@@ -47,14 +52,15 @@
 		;
 
 		this.bBackToCompose = false;
+		this.sLastComposeFocusedField = '';
 
-		this.allowContactsSync = Data.allowContactsSync;
-		this.enableContactsSync = Data.enableContactsSync;
+		this.allowContactsSync = ContactStore.allowContactsSync;
+		this.enableContactsSync = ContactStore.enableContactsSync;
 		this.allowExport = !Globals.bMobileDevice;
 
 		this.search = ko.observable('');
 		this.contactsCount = ko.observable(0);
-		this.contacts = Data.contacts;
+		this.contacts = ContactStore.contacts;
 
 		this.currentContact = ko.observable(null);
 
@@ -172,19 +178,14 @@
 
 		this.viewSaving = ko.observable(false);
 
-		this.useCheckboxesInList = Data.useCheckboxesInList;
+		this.useCheckboxesInList = SettingsStore.useCheckboxesInList;
 
 		this.search.subscribe(function () {
 			this.reloadContactList();
 		}, this);
 
-		this.contacts.subscribe(function () {
-			Utils.windowResize();
-		}, this);
-
-		this.viewProperties.subscribe(function () {
-			Utils.windowResize();
-		}, this);
+		this.contacts.subscribe(Utils.windowResizeCallback);
+		this.viewProperties.subscribe(Utils.windowResizeCallback);
 
 		this.contactsChecked = ko.computed(function () {
 			return _.filter(this.contacts(), function (oItem) {
@@ -209,7 +210,7 @@
 			});
 		}, this);
 
-		this.selector = new Selector(this.contacts, this.currentContact,
+		this.selector = new Selector(this.contacts, this.currentContact, null,
 			'.e-contact-item .actionHandle', '.e-contact-item.selected', '.e-contact-item .checkboxItem',
 				'.e-contact-item.focused');
 
@@ -238,7 +239,20 @@
 		});
 
 		this.newMessageCommand = Utils.createCommand(this, function () {
-			var aC = this.contactsCheckedOrSelected(), aE = [];
+
+			if (!Settings.capa(Enums.Capa.Composer))
+			{
+				return false;
+			}
+
+			var
+				aE = [],
+				aC = this.contactsCheckedOrSelected(),
+				aToEmails = null,
+				aCcEmails = null,
+				aBccEmails = null
+			;
+
 			if (Utils.isNonEmptyArray(aC))
 			{
 				aE = _.map(aC, function (oItem) {
@@ -267,8 +281,25 @@
 
 				kn.hideScreenPopup(require('View/Popup/Contacts'));
 
+				switch (self.sLastComposeFocusedField)
+				{
+					default:
+					case 'to':
+						aToEmails = aE;
+						break;
+					case 'cc':
+						aCcEmails = aE;
+						break;
+					case 'bcc':
+						aBccEmails = aE;
+						break;
+				}
+
+				self.sLastComposeFocusedField = '';
+
 				_.delay(function () {
-					kn.showScreenPopup(require('View/Popup/Compose'), [Enums.ComposeType.Empty, null, aE]);
+					kn.showScreenPopup(require('View/Popup/Compose'),
+						[Enums.ComposeType.Empty, null, aToEmails, aCcEmails, aBccEmails]);
 				}, 200);
 			}
 
@@ -343,7 +374,7 @@
 			require('App/User').contactsSync(function (sResult, oData) {
 				if (Enums.StorageResultType.Success !== sResult || !oData || !oData.Result)
 				{
-					window.alert(Utils.getNotification(
+					window.alert(Translator.getNotification(
 						oData && oData.ErrorCode ? oData.ErrorCode : Enums.Notification.ContactsSyncError));
 				}
 
@@ -382,7 +413,7 @@
 	kn.extendAsViewModel(['View/Popup/Contacts', 'PopupsContactsViewModel'], ContactsPopupView);
 	_.extend(ContactsPopupView.prototype, AbstractView.prototype);
 
-	ContactsPopupView.prototype.getPropertyPlceholder = function (sType)
+	ContactsPopupView.prototype.getPropertyPlaceholder = function (sType)
 	{
 		var sResult = '';
 		switch (sType)
@@ -403,7 +434,7 @@
 
 	ContactsPopupView.prototype.addNewProperty = function (sType, sTypeStr)
 	{
-		this.viewProperties.push(new ContactPropertyModel(sType, sTypeStr || '', '', true, this.getPropertyPlceholder(sType)));
+		this.viewProperties.push(new ContactPropertyModel(sType, sTypeStr || '', '', true, this.getPropertyPlaceholder(sType)));
 	};
 
 	ContactsPopupView.prototype.addNewOrFocusProperty = function (sType, sTypeStr)
@@ -472,7 +503,6 @@
 					'name': 'uploader',
 					'queueSize': 1,
 					'multipleSizeLimit': 1,
-					'disableFolderDragAndDrop': true,
 					'disableDragAndDrop': true,
 					'disableMultiple': true,
 					'disableDocumentDropPrevent': true,
@@ -493,7 +523,7 @@
 
 						if (!sId || !bResult || !oData || !oData.Result)
 						{
-							window.alert(Utils.i18n('CONTACTS/ERROR_IMPORT_FILE'));
+							window.alert(Translator.i18n('CONTACTS/ERROR_IMPORT_FILE'));
 						}
 
 					}, this))
@@ -626,10 +656,10 @@
 		}
 
 		aList.unshift(new ContactPropertyModel(Enums.ContactPropertyType.LastName, '', sLastName, false,
-			this.getPropertyPlceholder(Enums.ContactPropertyType.LastName)));
+			this.getPropertyPlaceholder(Enums.ContactPropertyType.LastName)));
 
 		aList.unshift(new ContactPropertyModel(Enums.ContactPropertyType.FirstName, '', sFirstName, !oContact,
-			this.getPropertyPlceholder(Enums.ContactPropertyType.FirstName)));
+			this.getPropertyPlaceholder(Enums.ContactPropertyType.FirstName)));
 
 		this.viewID(sId);
 
@@ -723,9 +753,10 @@
 		this.initUploader();
 	};
 
-	ContactsPopupView.prototype.onShow = function (bBackToCompose)
+	ContactsPopupView.prototype.onShow = function (bBackToCompose, sLastComposeFocusedField)
 	{
 		this.bBackToCompose = Utils.isUnd(bBackToCompose) ? false : !!bBackToCompose;
+		this.sLastComposeFocusedField = Utils.isUnd(sLastComposeFocusedField) ? '' : sLastComposeFocusedField;
 
 		kn.routeOff();
 		this.reloadContactList(true);
@@ -734,6 +765,7 @@
 	ContactsPopupView.prototype.onHide = function ()
 	{
 		kn.routeOn();
+
 		this.currentContact(null);
 		this.emptySelection(true);
 		this.search('');
@@ -742,11 +774,16 @@
 		Utils.delegateRunOnDestroy(this.contacts());
 		this.contacts([]);
 
+		this.sLastComposeFocusedField = '';
+
 		if (this.bBackToCompose)
 		{
 			this.bBackToCompose = false;
-			
-			kn.showScreenPopup(require('View/Popup/Compose'));
+
+			if (Settings.capa(Enums.Capa.Composer))
+			{
+				kn.showScreenPopup(require('View/Popup/Compose'));
+			}
 		}
 	};
 

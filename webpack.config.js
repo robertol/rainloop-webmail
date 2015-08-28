@@ -10,8 +10,9 @@ module.exports = {
 		path: __dirname + '/rainloop/v/0.0.0/static/js/',
 		filename: '[name].js',
 		publicPath: 'rainloop/v/0.0.0/static/js/',
-		chunkFilename: '[chunkhash].chunk.js'
+		chunkFilename: '[chunkhash].subapp.js'
 	},
+//	devtool: "#source-map",
 	plugins: [
 //		new webpack.optimize.CommonsChunkPlugin('common.js'),
 		new webpack.optimize.OccurenceOrderPlugin()
@@ -20,6 +21,7 @@ module.exports = {
 		modulesDirectories: [__dirname + '/dev/'],
 		extensions: ['', '.js'],
 		alias: {
+			"Opentip": __dirname  + "/dev/External/Opentip.js",
 			"ko": __dirname  + "/dev/External/ko.js"
 		}
 	},
@@ -28,7 +30,7 @@ module.exports = {
 		'JSON': 'window.JSON',
 		'JSEncrypt': 'window.JSEncrypt',
 		'$LAB': 'window.$LAB',
-		'SimplePace': 'window.SimplePace',
+		'progressJs': 'window.progressJs',
 		'PhotoSwipe': 'window.PhotoSwipe',
 		'PhotoSwipeUI_Default': 'window.PhotoSwipeUI_Default',
 		'queue': 'window.queue',
@@ -38,9 +40,11 @@ module.exports = {
 		'hasher': 'window.hasher',
 		'Jua': 'window.Jua',
 		'Autolinker': 'window.Autolinker',
+		'Tinycon': 'window.Tinycon',
 		'ssm': 'window.ssm',
 		'key': 'window.key',
 		'_': 'window._',
+		'Q': 'window.Q',
 		'$': 'window.jQuery'
 	}
 };

@@ -11,14 +11,16 @@
 	 * @param {string=} sEmail
 	 * @param {string=} sName
 	 * @param {string=} sDkimStatus
+	 * @param {string=} sDkimValue
 	 *
 	 * @constructor
 	 */
-	function EmailModel(sEmail, sName, sDkimStatus)
+	function EmailModel(sEmail, sName, sDkimStatus, sDkimValue)
 	{
 		this.email = sEmail || '';
 		this.name = sName || '';
 		this.dkimStatus = sDkimStatus || 'none';
+		this.dkimValue = sDkimValue || '';
 
 		this.clearDuplicateName();
 	}
@@ -32,6 +34,49 @@
 	{
 		var oEmailModel = new EmailModel();
 		return oEmailModel.initByJson(oJsonEmail) ? oEmailModel : null;
+	};
+
+	/**
+	 * @static
+	 * @param {string} sLine
+	 * @param {string=} sDelimiter = ';'
+	 * @return {Array}
+	 */
+	EmailModel.splitHelper = function (sLine, sDelimiter)
+	{
+		sDelimiter = sDelimiter || ';';
+
+		sLine = sLine.replace(/[\r\n]+/g, '; ').replace(/[\s]+/g, ' ');
+
+		var
+			iIndex = 0,
+			iLen = sLine.length,
+			bAt = false,
+			sChar = '',
+			sResult = ''
+		;
+
+		for (; iIndex < iLen; iIndex++)
+		{
+			sChar = sLine.charAt(iIndex);
+			switch (sChar)
+			{
+				case '@':
+					bAt = true;
+					break;
+				case ' ':
+					if (bAt)
+					{
+						bAt = false;
+						sResult += sDelimiter;
+					}
+					break;
+			}
+
+			sResult += sChar;
+		}
+
+		return sResult.split(sDelimiter);
 	};
 
 	/**
@@ -49,15 +94,22 @@
 	 */
 	EmailModel.prototype.dkimStatus = 'none';
 
+	/**
+	 * @type {string}
+	 */
+	EmailModel.prototype.dkimValue = '';
+
 	EmailModel.prototype.clear = function ()
 	{
 		this.email = '';
 		this.name = '';
+
 		this.dkimStatus = 'none';
+		this.dkimValue = '';
 	};
 
 	/**
-	 * @returns {boolean}
+	 * @return {boolean}
 	 */
 	EmailModel.prototype.validate = function ()
 	{
@@ -130,6 +182,7 @@
 			this.name = Utils.trim(oJsonEmail.Name);
 			this.email = Utils.trim(oJsonEmail.Email);
 			this.dkimStatus = Utils.trim(oJsonEmail.DkimStatus || '');
+			this.dkimValue = Utils.trim(oJsonEmail.DkimValue || '');
 
 			bResult = '' !== this.email;
 			this.clearDuplicateName();

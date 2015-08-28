@@ -224,6 +224,48 @@ class ServiceActions
 	/**
 	 * @return string
 	 */
+	public function ServiceOwnCloudAuth()
+	{
+		if (!\RainLoop\Utils::IsOwnCloud() ||
+			!isset($_ENV['___rainloop_owncloud_email']) ||
+			!isset($_ENV['___rainloop_owncloud_password']) ||
+			empty($_ENV['___rainloop_owncloud_email'])
+		)
+		{
+			$this->oActions->SetAuthLogoutToken();
+			$this->oActions->Location('./');
+			return '';
+		}
+
+		$bLogout = true;
+
+		$sEmail = $_ENV['___rainloop_owncloud_email'];
+		$sPassword = $_ENV['___rainloop_owncloud_password'];
+
+		try
+		{
+			$oAccount = $this->oActions->LoginProcess($sEmail, $sPassword);
+			$this->oActions->AuthToken($oAccount);
+
+			$bLogout = !($oAccount instanceof \RainLoop\Model\Account);
+		}
+		catch (\Exception $oException)
+		{
+			$this->oActions->Logger()->WriteException($oException);
+		}
+
+		if ($bLogout)
+		{
+			$this->oActions->SetAuthLogoutToken();
+		}
+
+		$this->oActions->Location('./');
+		return '';
+	}
+
+	/**
+	 * @return string
+	 */
 	public function ServiceAppend()
 	{
 		@\ob_start();
@@ -387,7 +429,7 @@ class ServiceActions
 		{
 			$this->oActions->verifyCacheByKey($sData);
 
-			$aData = \RainLoop\Utils::DecodeKeyValues($sData);
+			$aData = \RainLoop\Utils::DecodeKeyValuesQ($sData);
 			if (\is_array($aData) && !empty($aData['Token']) && !empty($aData['Url']) && $aData['Token'] === \RainLoop\Utils::GetConnectionToken())
 			{
 				$iCode = 404;
@@ -496,9 +538,10 @@ class ServiceActions
 		$sResult = '';
 		@\header('Content-Type: application/javascript; charset=utf-8');
 
-		if (!empty($this->aPaths[2]))
+		if (!empty($this->aPaths[3]))
 		{
-			$sLanguage = $this->oActions->ValidateLanguage($this->aPaths[2]);
+			$bAdmim =  'Admin' === (isset($this->aPaths[2]) ? (string) $this->aPaths[2] : 'App');
+			$sLanguage = $this->oActions->ValidateLanguage($this->aPaths[3], '', $bAdmim);
 
 			$bCacheEnabled = $this->Config()->Get('labs', 'cache_system_data', true);
 			if (!empty($sLanguage) && $bCacheEnabled)
@@ -509,13 +552,15 @@ class ServiceActions
 			$sCacheFileName = '';
 			if ($bCacheEnabled)
 			{
-				$sCacheFileName = \RainLoop\KeyPathHelper::LangCache($sLanguage, $this->oActions->Plugins()->Hash());
+				$sCacheFileName = \RainLoop\KeyPathHelper::LangCache(
+					$sLanguage, $bAdmim, $this->oActions->Plugins()->Hash());
+
 				$sResult = $this->Cacher()->Get($sCacheFileName);
 			}
 
 			if (0 === \strlen($sResult))
 			{
-				$sResult = $this->compileLanguage($sLanguage, false);
+				$sResult = $this->compileLanguage($sLanguage, $bAdmim, false);
 				if ($bCacheEnabled && 0 < \strlen($sCacheFileName))
 				{
 					$this->Cacher()->Set($sCacheFileName, $sResult);
@@ -620,7 +665,6 @@ class ServiceActions
 
 		$bAdmin = !empty($this->aPaths[2]) && 'Admin' === $this->aPaths[2];
 		$bJson = !empty($this->aPaths[9]) && 'Json' === $this->aPaths[9];
-		$sHash = !empty($this->aPaths[8]) && 5 < \strlen($this->aPaths[8]) ? $this->aPaths[8] : '';
 
 		if ($bJson)
 		{
@@ -652,7 +696,7 @@ class ServiceActions
 			$sCacheFileName = '';
 			if ($bCacheEnabled)
 			{
-				$sCacheFileName = \RainLoop\KeyPathHelper::CssCache($sTheme, $this->oActions->Plugins()->Hash(), $sHash);
+				$sCacheFileName = \RainLoop\KeyPathHelper::CssCache($sTheme, $this->oActions->Plugins()->Hash());
 				$sResult = $this->Cacher()->Get($sCacheFileName);
 			}
 
@@ -676,7 +720,10 @@ class ServiceActions
 
 					if (\file_exists($sThemeFile) && \file_exists($sThemeTemplateFile) && \file_exists($sThemeValuesFile))
 					{
-						$aResult[] = '@base: "'.($bCustomTheme ? '' : APP_WEB_PATH).'themes/'.$sRealTheme.'/";';
+						$aResult[] = '@base: "'.
+							($bCustomTheme ? \RainLoop\Utils::WebPath() : \RainLoop\Utils::WebVersionPath()).
+							'themes/'.$sRealTheme.'/";';
+
 						$aResult[] = \file_get_contents($sThemeValuesFile);
 						$aResult[] = \file_get_contents($sThemeFile);
 						$aResult[] = \file_get_contents($sThemeTemplateFile);
@@ -690,15 +737,6 @@ class ServiceActions
 					$aResult[] = $this->Plugins()->CompileCss($bAdmin);
 
 					$sResult = $oLess->compile(\implode("\n", $aResult));
-
-					if (!empty($sHash))
-					{
-						$sResult .= "\n".'.thm-body {'.
-							'background-image:none;'.
-							'background-image: url("./?/Raw/0/Public/'.$sHash.'/") !important;'.
-							'-moz-background-size:cover;-webkit-background-size:cover;background-size:cover;'.
-						'}';
-					}
 
 					if ($bCacheEnabled)
 					{
@@ -728,7 +766,8 @@ class ServiceActions
 	 */
 	public function ServiceSocialGoogle()
 	{
-		return $this->oActions->Social()->GooglePopupService();
+		$bXAuth = '1' === (string) $this->oHttp->GetQuery('xauth', '0');
+		return $this->oActions->Social()->GooglePopupService($bXAuth);
 	}
 
 	/**
@@ -789,7 +828,7 @@ class ServiceActions
 
 		@\header('Content-Type: text/html; charset=utf-8');
 		return \strtr(\file_get_contents(APP_VERSION_ROOT_PATH.'app/templates/BadBrowser.html'), array(
-			'{{BaseWebStaticPath}}' => APP_WEB_STATIC_PATH,
+			'{{BaseWebStaticPath}}' => \RainLoop\Utils::WebStaticPath(),
 			'{{ErrorTitle}}' => $sTitle,
 			'{{ErrorHeader}}' => $sTitle,
 			'{{ErrorDesc}}' => $sDesc
@@ -854,7 +893,7 @@ class ServiceActions
 			$sSsoSubData = $this->Cacher()->Get(\RainLoop\KeyPathHelper::SsoCacherKey($sSsoHash));
 			if (!empty($sSsoSubData))
 			{
-				$mData = \RainLoop\Utils::DecodeKeyValues($sSsoSubData);
+				$mData = \RainLoop\Utils::DecodeKeyValuesQ($sSsoSubData);
 				$this->Cacher()->Delete(\RainLoop\KeyPathHelper::SsoCacherKey($sSsoHash));
 
 				if (\is_array($mData) && !empty($mData['Email']) && isset($mData['Password'], $mData['Time']) &&
@@ -863,9 +902,40 @@ class ServiceActions
 					$sEmail = \trim($mData['Email']);
 					$sPassword = $mData['Password'];
 
+					$aAdditionalOptions = isset($mData['AdditionalOptions']) && \is_array($mData['AdditionalOptions']) &&
+						0 < \count($mData['AdditionalOptions']) ? $mData['AdditionalOptions'] : null;
+
 					try
 					{
 						$oAccount = $this->oActions->LoginProcess($sEmail, $sPassword);
+
+						if ($oAccount instanceof \RainLoop\Model\Account && $aAdditionalOptions)
+						{
+							$bNeedToSettings = false;
+
+							$oSettings = $this->SettingsProvider()->Load($oAccount);
+							if ($oSettings)
+							{
+								$sLanguage = isset($aAdditionalOptions['Language']) ?
+									$aAdditionalOptions['Language'] : '';
+
+								if ($sLanguage)
+								{
+									$sLanguage = $this->oActions->ValidateLanguage($sLanguage);
+									if ($sLanguage !== $oSettings->GetConf('Language', ''))
+									{
+										$bNeedToSettings = true;
+										$oSettings->SetConf('Language', $sLanguage);
+									}
+								}
+							}
+
+							if ($bNeedToSettings)
+							{
+								$this->SettingsProvider()->Save($oAccount, $oSettings);
+							}
+						}
+
 						$this->oActions->AuthToken($oAccount);
 
 						$bLogout = !($oAccount instanceof \RainLoop\Model\Account);
@@ -1034,7 +1104,9 @@ class ServiceActions
 	 */
 	public function ServiceChange()
 	{
-		if ($this->Config()->Get('webmail', 'allow_additional_accounts', true))
+		$oAccount = $this->oActions->GetAccount();
+
+		if ($oAccount && $this->oActions->GetCapa(false, \RainLoop\Enumerations\Capa::ADDITIONAL_ACCOUNTS, $oAccount))
 		{
 			$oAccountToLogin = null;
 			$sEmail = empty($this->aPaths[2]) ? '' : \urldecode(\trim($this->aPaths[2]));
@@ -1042,14 +1114,10 @@ class ServiceActions
 			{
 				$sEmail = \MailSo\Base\Utils::IdnToAscii($sEmail);
 
-				$oAccount = $this->oActions->GetAccount();
-				if ($oAccount)
+				$aAccounts = $this->oActions->GetAccounts($oAccount);
+				if (isset($aAccounts[$sEmail]))
 				{
-					$aAccounts = $this->oActions->GetAccounts($oAccount);
-					if (isset($aAccounts[$sEmail]))
-					{
-						$oAccountToLogin = $this->oActions->GetAccountFromCustomToken($aAccounts[$sEmail], false, false);
-					}
+					$oAccountToLogin = $this->oActions->GetAccountFromCustomToken($aAccounts[$sEmail], false, false);
 				}
 			}
 
@@ -1067,12 +1135,31 @@ class ServiceActions
 	 * @param string $sTitle
 	 * @param string $sDesc
 	 *
+	 * @return mixed
+	 */
+	public function ErrorTemplates($sTitle, $sDesc, $bShowBackLink = true)
+	{
+		return strtr(file_get_contents(APP_VERSION_ROOT_PATH.'app/templates/Error.html'), array(
+			'{{BaseWebStaticPath}}' => \RainLoop\Utils::WebStaticPath(),
+			'{{ErrorTitle}}' => $sTitle,
+			'{{ErrorHeader}}' => $sTitle,
+			'{{ErrorDesc}}' => $sDesc,
+			'{{BackLinkVisibilityStyle}}' => $bShowBackLink ? 'display:inline-block' : 'display:none',
+			'{{BackLink}}' => $this->oActions->StaticI18N('STATIC/BACK_LINK'),
+			'{{BackHref}}' => './'
+		));
+	}
+
+	/**
+	 * @param string $sTitle
+	 * @param string $sDesc
+	 *
 	 * @return string
 	 */
 	private function localError($sTitle, $sDesc)
 	{
 		@header('Content-Type: text/html; charset=utf-8');
-		return $this->oActions->ErrorTemplates($sTitle, \nl2br($sDesc));
+		return $this->ErrorTemplates($sTitle, \nl2br($sDesc));
 	}
 
 	/**
@@ -1109,6 +1196,7 @@ class ServiceActions
 					}
 					catch (\Exception $oException)
 					{
+						$oException = null;
 						$this->oActions->ClearSignMeData($oAccount);
 					}
 				}
@@ -1132,27 +1220,65 @@ class ServiceActions
 	 */
 	public function compileTemplates($bAdmin = false, $bJsOutput = true)
 	{
-		$sHtml =
-			\RainLoop\Utils::CompileTemplates(APP_VERSION_ROOT_PATH.'app/templates/Views/Components', $this->oActions, 'Component').
-			\RainLoop\Utils::CompileTemplates(APP_VERSION_ROOT_PATH.'app/templates/Views/'.($bAdmin ? 'Admin' : 'User'), $this->oActions).
-			\RainLoop\Utils::CompileTemplates(APP_VERSION_ROOT_PATH.'app/templates/Views/Common', $this->oActions).
-			$this->oActions->Plugins()->CompileTemplate($bAdmin);
+		$aTemplates = array();
+
+		\RainLoop\Utils::CompileTemplates($aTemplates, APP_VERSION_ROOT_PATH.'app/templates/Views/Components', 'Component');
+		\RainLoop\Utils::CompileTemplates($aTemplates, APP_VERSION_ROOT_PATH.'app/templates/Views/'.($bAdmin ? 'Admin' : 'User'));
+		\RainLoop\Utils::CompileTemplates($aTemplates, APP_VERSION_ROOT_PATH.'app/templates/Views/Common');
+
+		$this->oActions->Plugins()->CompileTemplate($aTemplates, $bAdmin);
+
+		$sHtml = '';
+		foreach ($aTemplates as $sName => $sFile)
+		{
+			$sName = \preg_replace('/[^a-zA-Z0-9]/', '', $sName);
+			$sHtml .= '<script id="'.$sName.'" type="text/html" data-cfasync="false">'.
+				$this->oActions->ProcessTemplate($sName, \file_get_contents($sFile)).'</script>';
+		}
+
+		unset($aTemplates);
 
 		return $bJsOutput ? 'window.rainloopTEMPLATES='.\MailSo\Base\Utils::Php2js(array($sHtml), $this->Logger()).';' : $sHtml;
 	}
 
 	/**
 	 * @param string $sLanguage
+	 *
+	 * @return string
+	 */
+	private function convertLanguageNameToMomentLanguageName($sLanguage)
+	{
+		switch ($sLanguage)
+		{
+			case 'pt-pt':
+				$sLanguage = 'pt';
+				break;
+			case 'ja-jp':
+				$sLanguage = 'ja';
+				break;
+			case 'ko-kr':
+				$sLanguage = 'ko';
+				break;
+		}
+
+		return $sLanguage;
+	}
+
+	/**
+	 * @param string $sLanguage
+	 * @param bool $bAdmin = false
 	 * @param bool $bWrapByScriptTag = true
 	 *
 	 * @return string
 	 */
-	private function compileLanguage($sLanguage, $bWrapByScriptTag = true)
+	private function compileLanguage($sLanguage, $bAdmin = false, $bWrapByScriptTag = true)
 	{
 		$aResultLang = array();
 
 		$sMoment = 'window.moment && window.moment.lang && window.moment.lang(\'en\');';
-		$sMomentFileName = APP_VERSION_ROOT_PATH.'app/i18n/moment/'.$sLanguage.'.js';
+		$sMomentFileName = APP_VERSION_ROOT_PATH.'app/i18n/moment/'.
+			$this->convertLanguageNameToMomentLanguageName($sLanguage).'.js';
+
 		if (\file_exists($sMomentFileName))
 		{
 			$sMoment = \file_get_contents($sMomentFileName);
@@ -1160,7 +1286,8 @@ class ServiceActions
 		}
 
 		\RainLoop\Utils::ReadAndAddLang(APP_VERSION_ROOT_PATH.'app/i18n/langs.ini', $aResultLang);
-		\RainLoop\Utils::ReadAndAddLang(APP_VERSION_ROOT_PATH.'langs/'.$sLanguage.'.ini', $aResultLang);
+		\RainLoop\Utils::ReadAndAddLang(APP_VERSION_ROOT_PATH.'langs/'.
+			($bAdmin ? 'admin/' : '').$sLanguage.'.ini', $aResultLang);
 
 		$this->Plugins()->ReadLang($sLanguage, $aResultLang);
 

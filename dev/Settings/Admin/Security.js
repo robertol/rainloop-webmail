@@ -11,9 +11,11 @@
 		Utils = require('Common/Utils'),
 		Links = require('Common/Links'),
 
+		AppAdminStore = require('Stores/Admin/App'),
+		CapaAdminStore = require('Stores/Admin/Capa'),
+
 		Settings = require('Storage/Settings'),
-		Data = require('Storage/Admin/Data'),
-		Remote = require('Storage/Admin/Remote')
+		Remote = require('Remote/Admin/Ajax')
 	;
 
 	/**
@@ -21,15 +23,31 @@
 	 */
 	function SecurityAdminSettings()
 	{
-		this.useLocalProxyForExternalImages = Data.useLocalProxyForExternalImages;
+		this.useLocalProxyForExternalImages = AppAdminStore.useLocalProxyForExternalImages;
 
-		this.weakPassword = Data.weakPassword;
+		this.weakPassword = AppAdminStore.weakPassword;
 
-		this.capaOpenPGP = ko.observable(Settings.capa(Enums.Capa.OpenPGP));
-		this.capaTwoFactorAuth = ko.observable(Settings.capa(Enums.Capa.TwoFactor));
+		this.capaOpenPGP = CapaAdminStore.openPGP;
+
+		this.capaTwoFactorAuth = CapaAdminStore.twoFactorAuth;
+		this.capaTwoFactorAuthForce = CapaAdminStore.twoFactorAuthForce;
+
+		this.capaTwoFactorAuth.subscribe(function (bValue) {
+			if (!bValue)
+			{
+				this.capaTwoFactorAuthForce(false);
+			}
+		}, this);
 
 		this.verifySslCertificate = ko.observable(!!Settings.settingsGet('VerifySslCertificate'));
 		this.allowSelfSigned = ko.observable(!!Settings.settingsGet('AllowSelfSigned'));
+
+		this.verifySslCertificate.subscribe(function (bValue) {
+			if (!bValue)
+			{
+				this.allowSelfSigned(true);
+			}
+		}, this);
 
 		this.adminLogin = ko.observable(Settings.settingsGet('AdminLogin'));
 		this.adminLoginError = ko.observable(false);
@@ -112,10 +130,6 @@
 
 	SecurityAdminSettings.prototype.onBuild = function ()
 	{
-		var
-			Remote = require('Storage/Admin/Remote')
-		;
-
 		this.capaOpenPGP.subscribe(function (bValue) {
 			Remote.saveAdminConfig(Utils.emptyFunction, {
 				'CapaOpenPGP': bValue ? '1' : '0'
@@ -125,6 +139,12 @@
 		this.capaTwoFactorAuth.subscribe(function (bValue) {
 			Remote.saveAdminConfig(Utils.emptyFunction, {
 				'CapaTwoFactorAuth': bValue ? '1' : '0'
+			});
+		});
+
+		this.capaTwoFactorAuthForce.subscribe(function (bValue) {
+			Remote.saveAdminConfig(Utils.emptyFunction, {
+				'CapaTwoFactorAuthForce': bValue ? '1' : '0'
 			});
 		});
 

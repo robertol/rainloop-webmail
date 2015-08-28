@@ -14,6 +14,7 @@
 			Plugins = require('Common/Plugins'),
 			Utils = require('Common/Utils'),
 			Enums = require('Common/Enums'),
+			Translator = require('Common/Translator'),
 
 			EmailModel = require('Model/Email')
 		;
@@ -21,8 +22,7 @@
 		Globals.__APP__ = App;
 
 		Globals.$win
-			.keydown(Utils.killCtrlAandS)
-			.keyup(Utils.killCtrlAandS)
+			.keydown(Utils.kill_CtrlA_CtrlS)
 			.unload(function () {
 				Globals.bUnload = true;
 			})
@@ -37,19 +37,23 @@
 
 		// export
 		window['rl'] = window['rl'] || {};
+		window['rl']['i18n'] = _.bind(Translator.i18n, Translator);
+
 		window['rl']['addHook'] = _.bind(Plugins.addHook, Plugins);
 		window['rl']['settingsGet'] = _.bind(Plugins.mainSettingsGet, Plugins);
-		window['rl']['remoteRequest'] = _.bind(Plugins.remoteRequest, Plugins);
-		window['rl']['pluginSettingsGet'] = _.bind(Plugins.settingsGet, Plugins);
 		window['rl']['createCommand'] = Utils.createCommand;
-		window['rl']['i18n'] = Utils.i18n;
+
+		window['rl']['addSettingsViewModel'] = _.bind(Plugins.addSettingsViewModel, Plugins);
+
+		window['rl']['pluginRemoteRequest'] = _.bind(Plugins.remoteRequest, Plugins);
+		window['rl']['pluginSettingsGet'] = _.bind(Plugins.settingsGet, Plugins);
 
 		window['rl']['EmailModel'] = EmailModel;
 		window['rl']['Enums'] = Enums;
 
 		window['__APP_BOOT'] = function (fCall) {
 
-			$(function () {
+			$(_.delay(function () {
 
 				if (!$('#rl-content').is(':visible'))
 				{
@@ -77,7 +81,8 @@
 				}
 
 				window['__APP_BOOT'] = null;
-			});
+
+			}, 10));
 		};
 
 	};

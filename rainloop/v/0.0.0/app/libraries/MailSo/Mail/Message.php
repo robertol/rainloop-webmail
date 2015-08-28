@@ -163,16 +163,6 @@ class Message
 	private $aThreads;
 
 	/**
-	 * @var int
-	 */
-	private $iParentThread;
-
-	/**
-	 * @var int
-	 */
-	private $iThreadsLen;
-
-	/**
 	 * @var bool
 	 */
 	private $bTextPartIsTrimmed;
@@ -240,8 +230,6 @@ class Message
 		$this->sReadReceipt = '';
 
 		$this->aThreads = array();
-		$this->iThreadsLen = 0;
-		$this->iParentThread = 0;
 
 		$this->bTextPartIsTrimmed = false;
 
@@ -543,38 +531,6 @@ class Message
 	}
 
 	/**
-	 * @return int
-	 */
-	public function ThreadsLen()
-	{
-		return $this->iThreadsLen;
-	}
-
-	/**
-	 * @param int $iThreadsLen
-	 */
-	public function SetThreadsLen($iThreadsLen)
-	{
-		$this->iThreadsLen = $iThreadsLen;
-	}
-
-	/**
-	 * @return int
-	 */
-	public function ParentThread()
-	{
-		return $this->iParentThread;
-	}
-
-	/**
-	 * @param int $iParentThread
-	 */
-	public function SetParentThread($iParentThread)
-	{
-		$this->iParentThread = $iParentThread;
-	}
-
-	/**
 	 * @return boole
 	 */
 	public function TextPartIsTrimmed()
@@ -664,7 +620,8 @@ class Message
 			$this->oDeliveredTo = $oHeaders->GetAsEmailCollection(\MailSo\Mime\Enumerations\Header::DELIVERED_TO, $bCharsetAutoDetect);
 
 			$this->sInReplyTo = $oHeaders->ValueByName(\MailSo\Mime\Enumerations\Header::IN_REPLY_TO);
-			$this->sReferences = $oHeaders->ValueByName(\MailSo\Mime\Enumerations\Header::REFERENCES);
+			$this->sReferences = \MailSo\Base\Utils::StripSpaces(
+				$oHeaders->ValueByName(\MailSo\Mime\Enumerations\Header::REFERENCES));
 
 			$sHeaderDate = $oHeaders->ValueByName(\MailSo\Mime\Enumerations\Header::DATE);
 			$this->sHeaderDate = $sHeaderDate;
@@ -794,8 +751,8 @@ class Message
 				$sCharset = \MailSo\Base\Enumerations\Charset::UTF_8;
 			}
 
-			$sHtmlParts = array();
-			$sPlainParts = array();
+			$aHtmlParts = array();
+			$aPlainParts = array();
 
 			foreach ($aTextParts as $oPart)
 			{
@@ -825,22 +782,27 @@ class Message
 
 					if ('text/html' === $oPart->ContentType())
 					{
-						$sHtmlParts[] = $sText;
+						$aHtmlParts[] = $sText;
 					}
 					else
 					{
-						$sPlainParts[] = $sText;
+						if ($oPart->IsFlowedFormat())
+						{
+							$sText = \MailSo\Base\Utils::DecodeFlowedFormat($sText);
+						}
+
+						$aPlainParts[] = $sText;
 					}
 				}
 			}
 
-			if (0 < \count($sHtmlParts))
+			if (0 < \count($aHtmlParts))
 			{
-				$this->sHtml = \implode('<br />', $sHtmlParts);
+				$this->sHtml = \implode('<br />', $aHtmlParts);
 			}
 			else
 			{
-				$this->sPlain = \trim(\implode("\n", $sPlainParts));
+				$this->sPlain = \trim(\implode("\n", $aPlainParts));
 			}
 
 			$aMatch = array();
@@ -856,7 +818,7 @@ class Message
 				$this->bPgpEncrypted = true;
 			}
 
-			unset($sHtmlParts, $sPlainParts, $aMatch);
+			unset($aHtmlParts, $aPlainParts, $aMatch);
 		}
 
 //		if (empty($this->sPgpSignature) && 'multipart/signed' === \strtolower($this->sContentType) &&

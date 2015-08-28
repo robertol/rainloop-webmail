@@ -4,16 +4,13 @@
 	'use strict';
 
 	var
-		window = require('window'),
 		_ = require('_'),
 		ko = require('ko'),
 
 		Enums = require('Common/Enums'),
 
-		PopupsDomainViewModel = require('View/Popup/Domain'),
-
-		Data = require('Storage/Admin/Data'),
-		Remote = require('Storage/Admin/Remote')
+		DomainStore = require('Stores/Admin/Domain'),
+		Remote = require('Remote/Admin/Ajax')
 	;
 
 	/**
@@ -21,42 +18,18 @@
 	 */
 	function DomainsAdminSettings()
 	{
-		this.domains = Data.domains;
-
-		this.iDomainForDeletionTimeout = 0;
+		this.domains = DomainStore.domains;
 
 		this.visibility = ko.computed(function () {
-			return Data.domains.loading() ? 'visible' : 'hidden';
+			return this.domains.loading() ? 'visible' : 'hidden';
 		}, this);
 
-		this.domainForDeletion = ko.observable(null).extend({'toggleSubscribe': [this,
-			function (oPrev) {
-				if (oPrev)
-				{
-					oPrev.deleteAccess(false);
-				}
-			}, function (oNext) {
-				if (oNext)
-				{
-					oNext.deleteAccess(true);
-					this.startDomainForDeletionTimeout();
-				}
-			}
-		]});
+		this.domainForDeletion = ko.observable(null).deleteAccessHelper();
 	}
-
-	DomainsAdminSettings.prototype.startDomainForDeletionTimeout = function ()
-	{
-		var self = this;
-		window.clearInterval(this.iDomainForDeletionTimeout);
-		this.iDomainForDeletionTimeout = window.setTimeout(function () {
-			self.domainForDeletion(null);
-		}, 1000 * 3);
-	};
 
 	DomainsAdminSettings.prototype.createDomain = function ()
 	{
-		require('Knoin/Knoin').showScreenPopup(PopupsDomainViewModel);
+		require('Knoin/Knoin').showScreenPopup(require('View/Popup/Domain'));
 	};
 
 	DomainsAdminSettings.prototype.deleteDomain = function (oDomain)
@@ -91,7 +64,7 @@
 	{
 		if (Enums.StorageResultType.Success === sResult && oData && oData.Result)
 		{
-			require('Knoin/Knoin').showScreenPopup(PopupsDomainViewModel, [oData.Result]);
+			require('Knoin/Knoin').showScreenPopup(require('View/Popup/Domain'), [oData.Result]);
 		}
 	};
 

@@ -8,6 +8,27 @@
 	/**
 	 * @enum {string}
 	 */
+	Enums.FileType = {
+		'Unknown': 'unknown',
+		'Text': 'text',
+		'Html': 'html',
+		'Code': 'code',
+		'Eml': 'eml',
+		'WordText': 'word-text',
+		'Pdf': 'pdf',
+		'Image': 'image',
+		'Audio': 'audio',
+		'Video': 'video',
+		'Sheet': 'sheet',
+		'Presentation': 'presentation',
+		'Certificate': 'certificate',
+		'CertificateBin': 'certificate-bin',
+		'Archive': 'archive'
+	};
+
+	/**
+	 * @enum {string}
+	 */
 	Enums.StorageResultType = {
 		'Success': 'success',
 		'Abort': 'abort',
@@ -16,12 +37,13 @@
 	};
 
 	/**
-	 * @enum {number}
+	 * @enum {string}
 	 */
-	Enums.SpoolerType = {
-		'Delay': 0,
-		'MessageList': 1,
-		'Move': 2
+	Enums.Focused = {
+		'None': 'none',
+		'MessageList': 'message-list',
+		'MessageView': 'message-view',
+		'FolderList': 'folder-list'
 	};
 
 	/**
@@ -46,15 +68,31 @@
 	 */
 	Enums.Capa = {
 		'TwoFactor': 'TWO_FACTOR',
+		'TwoFactorForce': 'TWO_FACTOR_FORCE',
 		'OpenPGP': 'OPEN_PGP',
 		'Prefetch': 'PREFETCH',
 		'Gravatar': 'GRAVATAR',
+		'Folders': 'FOLDERS',
+		'Composer': 'COMPOSER',
+		'Contacts': 'CONTACTS',
+		'Reload': 'RELOAD',
+		'Search': 'SEARCH',
+		'SearchAdv': 'SEARCH_ADV',
+		'MessageActions': 'MESSAGE_ACTIONS',
+		'MessageListActions': 'MESSAGELIST_ACTIONS',
+		'AttachmentsActions': 'ATTACHMENTS_ACTIONS',
+		'DangerousActions': 'DANGEROUS_ACTIONS',
+		'Settings': 'SETTINGS',
+		'Help': 'HELP',
 		'Themes': 'THEMES',
 		'UserBackground': 'USER_BACKGROUND',
 		'Sieve': 'SIEVE',
+		'Filters': 'FILTERS',
 		'AttachmentThumbnails': 'ATTACHMENT_THUMBNAILS',
+		'Templates': 'TEMPLATES',
+		'AutoLogout': 'AUTOLOGOUT',
 		'AdditionalAccounts': 'ADDITIONAL_ACCOUNTS',
-		'AdditionalIdentities': 'ADDITIONAL_IDENTITIES'
+		'Identities': 'IDENTITIES'
 	};
 
 	/**
@@ -71,6 +109,7 @@
 		'Settings': 'settings',
 		'Menu': 'menu',
 		'PopupComposeOpenPGP': 'compose-open-pgp',
+		'PopupMessageOpenPGP': 'message-open-pgp',
 		'PopupKeyboardShortcutsHelp': 'popup-keyboard-shortcuts-help',
 		'PopupAsk': 'popup-ask'
 	};
@@ -87,6 +126,21 @@
 		'Archive': 15,
 		'NotSpam': 80,
 		'User': 99
+	};
+
+	/**
+	 * @enum {number}
+	 */
+	Enums.ServerFolderType = {
+		'USER': 0,
+		'INBOX': 1,
+		'SENT': 2,
+		'DRAFTS': 3,
+		'JUNK': 4,
+		'TRASH': 5,
+		'IMPORTANT': 10,
+		'FLAGGED': 11,
+		'ALL': 12
 	};
 
 	/**
@@ -155,7 +209,10 @@
 		'MailBoxListSize': 2,
 		'ExpandedFolders': 3,
 		'FolderListSize': 4,
-		'MessageListSize': 5
+		'MessageListSize': 5,
+		'LastReplyAction': 6,
+		'LastSignMe': 7,
+		'ComposeLastIdentityID': 8
 	};
 
 	/**
@@ -207,7 +264,7 @@
 	/**
 	 * @enum {number}
 	 */
-	Enums.DesktopNotifications = {
+	Enums.DesktopNotification = {
 		'Allowed': 0,
 		'NotAllowed': 1,
 		'Denied': 2,
@@ -231,14 +288,6 @@
 		'Plain': 'Plain',
 		'HtmlForced': 'HtmlForced',
 		'PlainForced': 'PlainForced'
-	};
-
-	/**
-	 * @enum {string}
-	 */
-	Enums.CustomThemeType = {
-		'Light': 'Light',
-		'Dark': 'Dark'
 	};
 
 	/**
@@ -271,21 +320,13 @@
 	};
 
 	/**
-	 * @enum {string}
-	 */
-	Enums.InterfaceAnimation = {
-		'None': 'None',
-		'Normal': 'Normal',
-		'Full': 'Full'
-	};
-
-	/**
 	 * @enum {number}
 	 */
 	Enums.Layout = {
 		'NoPreview': 0,
 		'SidePreview': 1,
-		'BottomPreview': 2
+		'BottomPreview': 2,
+		'Mobile': 3
 	};
 
 	/**
@@ -294,7 +335,9 @@
 	Enums.FilterConditionField = {
 		'From': 'From',
 		'Recipient': 'Recipient',
-		'Subject': 'Subject'
+		'Subject': 'Subject',
+		'Header': 'Header',
+		'Size': 'Size'
 	};
 
 	/**
@@ -304,7 +347,9 @@
 		'Contains': 'Contains',
 		'NotContains': 'NotContains',
 		'EqualTo': 'EqualTo',
-		'NotEqualTo': 'NotEqualTo'
+		'NotEqualTo': 'NotEqualTo',
+		'Over': 'Over',
+		'Under': 'Under'
 	};
 
 	/**
@@ -312,8 +357,10 @@
 	 */
 	Enums.FiltersAction = {
 		'None': 'None',
-		'Move': 'Move',
+		'MoveTo': 'MoveTo',
 		'Discard': 'Discard',
+		'Vacation': 'Vacation',
+		'Reject': 'Reject',
 		'Forward': 'Forward'
 	};
 
@@ -405,6 +452,10 @@
 		'CantSendMessage': 302,
 		'InvalidRecipients': 303,
 
+		'CantSaveFilters': 351,
+		'CantGetFilters': 352,
+		'FiltersAreNotCorrect': 355,
+
 		'CantCreateFolder': 400,
 		'CantRenameFolder': 401,
 		'CantDeleteFolder': 402,
@@ -427,6 +478,7 @@
 		'LicensingBanned': 712,
 
 		'DemoSendMessageError': 750,
+		'DemoAccountError': 751,
 
 		'AccountAlreadyExists': 801,
 		'AccountDoesNotExist': 802,
@@ -434,6 +486,12 @@
 		'MailServerError': 901,
 		'ClientViewError': 902,
 		'InvalidInputArgument': 903,
+
+		'AjaxFalse': 950,
+		'AjaxAbort': 951,
+		'AjaxParse': 952,
+		'AjaxTimeout': 953,
+
 		'UnknownNotification': 999,
 		'UnknownError': 999
 	};

@@ -8,11 +8,11 @@
 		ko = require('ko'),
 
 		Enums = require('Common/Enums'),
-		Globals = require('Common/Globals'),
 		Utils = require('Common/Utils'),
 		Events = require('Common/Events'),
+		Translator = require('Common/Translator'),
 
-		Cache = require('Storage/User/Cache'),
+		Cache = require('Common/Cache'),
 
 		AbstractModel = require('Knoin/AbstractModel')
 	;
@@ -43,6 +43,7 @@
 		this.edited = ko.observable(false);
 		this.collapsed = ko.observable(true);
 		this.subScribed = ko.observable(true);
+		this.checkable = ko.observable(false);
 		this.subFolders = ko.observableArray([]);
 		this.deleteAccess = ko.observable(false);
 		this.actionBlink = ko.observable(false).extend({'falseTimeout': 1000});
@@ -75,6 +76,10 @@
 	{
 		var sInboxFolderName = Cache.getFolderInboxName();
 
+		this.isInbox = ko.computed(function () {
+			return Enums.FolderType.Inbox === this.type();
+		}, this);
+
 		this.hasSubScribedSubfolders = ko.computed(function () {
 			return !!_.find(this.subFolders(), function (oFolder) {
 				return oFolder.subScribed() && !oFolder.isSystemFolder();
@@ -86,7 +91,7 @@
 		}, this);
 
 		this.visible = ko.computed(function () {
-			
+
 			var
 				bSubScribed = this.subScribed(),
 				bSubFolders = this.hasSubScribedSubfolders()
@@ -101,6 +106,7 @@
 		}, this);
 
 		this.hidden = ko.computed(function () {
+
 			var
 				bSystem = this.isSystemFolder(),
 				bSubFolders = this.hasSubScribedSubfolders()
@@ -127,7 +133,7 @@
 				}
 			},
 			'owner': this
-		});
+		}).extend({'notify': 'always'});
 
 		this.messageCountUnread = ko.computed({
 			'read': this.privateMessageCountUnread,
@@ -142,7 +148,7 @@
 				}
 			},
 			'owner': this
-		});
+		}).extend({'notify': 'always'});
 
 		this.printableUnreadCount = ko.computed(function () {
 			var
@@ -178,6 +184,8 @@
 			return !this.isSystemFolder() && this.selectable && sInboxFolderName !== this.fullNameRaw;
 		}, this);
 
+		this.canBeChecked = this.canBeSubScribed;
+
 //		this.visible.subscribe(function () {
 //			Utils.timeOutAction('folder-list-folder-visibility-change', function () {
 //				Globals.$win.trigger('folder-list-folder-visibility-change');
@@ -186,7 +194,7 @@
 
 		this.localName = ko.computed(function () {
 
-			Globals.langChangeTrigger();
+			Translator.trigger();
 
 			var
 				iType = this.type(),
@@ -198,22 +206,22 @@
 				switch (iType)
 				{
 					case Enums.FolderType.Inbox:
-						sName = Utils.i18n('FOLDER_LIST/INBOX_NAME');
+						sName = Translator.i18n('FOLDER_LIST/INBOX_NAME');
 						break;
 					case Enums.FolderType.SentItems:
-						sName = Utils.i18n('FOLDER_LIST/SENT_NAME');
+						sName = Translator.i18n('FOLDER_LIST/SENT_NAME');
 						break;
 					case Enums.FolderType.Draft:
-						sName = Utils.i18n('FOLDER_LIST/DRAFTS_NAME');
+						sName = Translator.i18n('FOLDER_LIST/DRAFTS_NAME');
 						break;
 					case Enums.FolderType.Spam:
-						sName = Utils.i18n('FOLDER_LIST/SPAM_NAME');
+						sName = Translator.i18n('FOLDER_LIST/SPAM_NAME');
 						break;
 					case Enums.FolderType.Trash:
-						sName = Utils.i18n('FOLDER_LIST/TRASH_NAME');
+						sName = Translator.i18n('FOLDER_LIST/TRASH_NAME');
 						break;
 					case Enums.FolderType.Archive:
-						sName = Utils.i18n('FOLDER_LIST/ARCHIVE_NAME');
+						sName = Translator.i18n('FOLDER_LIST/ARCHIVE_NAME');
 						break;
 				}
 			}
@@ -224,7 +232,7 @@
 
 		this.manageFolderSystemName = ko.computed(function () {
 
-			Globals.langChangeTrigger();
+			Translator.trigger();
 
 			var
 				sSuffix = '',
@@ -237,22 +245,22 @@
 				switch (iType)
 				{
 					case Enums.FolderType.Inbox:
-						sSuffix = '(' + Utils.i18n('FOLDER_LIST/INBOX_NAME') + ')';
+						sSuffix = '(' + Translator.i18n('FOLDER_LIST/INBOX_NAME') + ')';
 						break;
 					case Enums.FolderType.SentItems:
-						sSuffix = '(' + Utils.i18n('FOLDER_LIST/SENT_NAME') + ')';
+						sSuffix = '(' + Translator.i18n('FOLDER_LIST/SENT_NAME') + ')';
 						break;
 					case Enums.FolderType.Draft:
-						sSuffix = '(' + Utils.i18n('FOLDER_LIST/DRAFTS_NAME') + ')';
+						sSuffix = '(' + Translator.i18n('FOLDER_LIST/DRAFTS_NAME') + ')';
 						break;
 					case Enums.FolderType.Spam:
-						sSuffix = '(' + Utils.i18n('FOLDER_LIST/SPAM_NAME') + ')';
+						sSuffix = '(' + Translator.i18n('FOLDER_LIST/SPAM_NAME') + ')';
 						break;
 					case Enums.FolderType.Trash:
-						sSuffix = '(' + Utils.i18n('FOLDER_LIST/TRASH_NAME') + ')';
+						sSuffix = '(' + Translator.i18n('FOLDER_LIST/TRASH_NAME') + ')';
 						break;
 					case Enums.FolderType.Archive:
-						sSuffix = '(' + Utils.i18n('FOLDER_LIST/ARCHIVE_NAME') + ')';
+						sSuffix = '(' + Translator.i18n('FOLDER_LIST/ARCHIVE_NAME') + ')';
 						break;
 				}
 			}
@@ -277,7 +285,7 @@
 		});
 
 		this.hasUnreadMessages = ko.computed(function () {
-			return 0 < this.messageCountUnread();
+			return 0 < this.messageCountUnread() && '' !== this.printableUnreadCount();
 		}, this);
 
 		this.hasSubScribedUnreadMessagesSubfolders = ko.computed(function () {
@@ -348,6 +356,8 @@
 			this.existen = !!oJsonFolder.IsExists;
 
 			this.subScribed(!!oJsonFolder.IsSubscribed);
+			this.checkable(!!oJsonFolder.Checkable);
+
 			this.type(sInboxFolderName === this.fullNameRaw ? Enums.FolderType.Inbox : Enums.FolderType.User);
 
 			bResult = true;

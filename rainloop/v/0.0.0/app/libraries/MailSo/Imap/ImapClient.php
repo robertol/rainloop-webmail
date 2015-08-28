@@ -194,8 +194,8 @@ class ImapClient extends \MailSo\Net\NetClient
 				\MailSo\Log\Enumerations\Type::ERROR, true);
 		}
 
-		$sLogin = \trim($sLogin);
-		$sLogin = \MailSo\Base\Utils::IdnToAscii($sLogin);
+		$sLogin = \MailSo\Base\Utils::IdnToAscii(\MailSo\Base\Utils::Trim($sLogin));
+
 		$sPassword = $sPassword;
 
 		$this->sLogginedUser = $sLogin;
@@ -326,7 +326,24 @@ class ImapClient extends \MailSo\Net\NetClient
 
 		try
 		{
-			$this->SendRequestWithCheck('AUTHENTICATE', array('XOAUTH2', trim($sXOAuth2Token)));
+			$this->SendRequest('AUTHENTICATE', array('XOAUTH2', \trim($sXOAuth2Token)));
+			$aR = $this->parseResponseWithValidation();
+
+			if (\is_array($aR) && 0 < \count($aR) && isset($aR[\count($aR) - 1]))
+			{
+				$oR = $aR[\count($aR) - 1];
+				if (\MailSo\Imap\Enumerations\ResponseType::CONTINUATION === $oR->ResponseType)
+				{
+					if (!empty($oR->ResponseList[1]) && preg_match('/^[a-zA-Z0-9=+\/]+$/', $oR->ResponseList[1]))
+					{
+						$this->Logger()->Write(\base64_decode($oR->ResponseList[1]),
+							\MailSo\Log\Enumerations\Type::WARNING);
+					}
+
+					$this->sendRaw('');
+					$this->parseResponseWithValidation();
+				}
+			}
 		}
 		catch (\MailSo\Imap\Exceptions\NegativeResponseException $oException)
 		{
@@ -617,6 +634,9 @@ class ImapClient extends \MailSo\Net\NetClient
 	{
 		$aReturn = array();
 
+		$sDelimiter = '';
+		$bInbox = false;
+
 		$oImapResponse = null;
 		foreach ($aResult as /* @var $oImapResponse \MailSo\Imap\Response */ $oImapResponse)
 		{
@@ -628,6 +648,16 @@ class ImapClient extends \MailSo\Net\NetClient
 					$oFolder = Folder::NewInstance($oImapResponse->ResponseList[4],
 						$oImapResponse->ResponseList[3], $oImapResponse->ResponseList[2]);
 
+					if ($oFolder->IsInbox())
+					{
+						$bInbox = true;
+					}
+
+					if (empty($sDelimiter))
+					{
+						$sDelimiter = $oFolder->Delimiter();
+					}
+
 					$aReturn[] = $oFolder;
 				}
 				catch (\MailSo\Base\Exceptions\InvalidArgumentException $oException)
@@ -635,6 +665,11 @@ class ImapClient extends \MailSo\Net\NetClient
 					$this->writeLogException($oException, \MailSo\Log\Enumerations\Type::WARNING, false);
 				}
 			}
+		}
+
+		if (!$bInbox && !empty($sDelimiter))
+		{
+			$aReturn[] = Folder::NewInstance('INBOX', $sDelimiter);
 		}
 
 		if ($bUseListStatus)
@@ -663,6 +698,7 @@ class ImapClient extends \MailSo\Net\NetClient
 					{
 						$sName = null;
 						$aStatus = array();
+
 						foreach ($oImapResponse->ResponseList[3] as $sArrayItem)
 						{
 							if (null === $sName)
@@ -716,17 +752,21 @@ class ImapClient extends \MailSo\Net\NetClient
 			$this->EscapeString($sListPattern)
 		);
 
-		if ($bUseListStatus && $this->IsSupported('LIST-STATUS'))
+		if ($bUseListStatus && !$bIsSubscribeList && $this->IsSupported('LIST-STATUS'))
 		{
-			$aParameters[] = 'RETURN';
-			$aParameters[] = array(
-				 'STATUS',
-				 array(
-					\MailSo\Imap\Enumerations\FolderStatus::MESSAGES,
-					\MailSo\Imap\Enumerations\FolderStatus::UNSEEN,
-					\MailSo\Imap\Enumerations\FolderStatus::UIDNEXT
-				 )
+			$aL = array(
+				\MailSo\Imap\Enumerations\FolderStatus::MESSAGES,
+				\MailSo\Imap\Enumerations\FolderStatus::UNSEEN,
+				\MailSo\Imap\Enumerations\FolderStatus::UIDNEXT
 			);
+
+//			if ($this->IsSupported('CONDSTORE'))
+//			{
+//				$aL[] = \MailSo\Imap\Enumerations\FolderStatus::HIGHESTMODSEQ;
+//			}
+
+			$aParameters[] = 'RETURN';
+			$aParameters[] = array('STATUS', $aL);
 		}
 		else
 		{
@@ -827,6 +867,12 @@ class ImapClient extends \MailSo\Net\NetClient
 							isset($oImapResponse->OptionalResponse[1]))
 						{
 							$oResult->Uidnext = $oImapResponse->OptionalResponse[1];
+						}
+						else if ('HIGHESTMODSEQ' === $oImapResponse->OptionalResponse[0] &&
+							isset($oImapResponse->OptionalResponse[1]) &&
+							\is_numeric($oImapResponse->OptionalResponse[1]))
+						{
+							$oResult->HighestModSeq = \trim($oImapResponse->OptionalResponse[1]);
 						}
 					}
 
@@ -1185,7 +1231,7 @@ class ImapClient extends \MailSo\Net\NetClient
 			foreach ($aResponse as /* @var $oImapResponse \MailSo\Imap\Response */ $oImapResponse)
 			{
 				if (\MailSo\Imap\Enumerations\ResponseType::UNTAGGED === $oImapResponse->ResponseType
-					&& 'ESEARCH' === $oImapResponse->StatusOrIndex
+					&& ('ESEARCH' === $oImapResponse->StatusOrIndex || 'ESORT' === $oImapResponse->StatusOrIndex)
 					&& \is_array($oImapResponse->ResponseList)
 					&& isset($oImapResponse->ResponseList[2], $oImapResponse->ResponseList[2][0], $oImapResponse->ResponseList[2][1])
 					&& 'TAG' === $oImapResponse->ResponseList[2][0] && $sRequestTag === $oImapResponse->ResponseList[2][1]
@@ -1255,6 +1301,25 @@ class ImapClient extends \MailSo\Net\NetClient
 	}
 
 	/**
+	 * @param array $aResult
+	 * @return \MailSo\Imap\Response
+	 */
+	private function findLastResponse($aResult)
+	{
+		$oResult = null;
+		if (\is_array($aResult) && 0 < \count($aResult))
+		{
+			$oResult = $aResult[\count($aResult) - 1];
+			if (!($oResult instanceof \MailSo\Imap\Response))
+			{
+				$oResult = null;
+			}
+		}
+
+		return $oResult;
+	}
+
+	/**
 	 * @param string $sSearchCriterias
 	 * @param bool $bReturnUid = true
 	 * @param string $sCharset = ''
@@ -1282,8 +1347,32 @@ class ImapClient extends \MailSo\Net\NetClient
 
 		$sCmd = 'SEARCH';
 
-		$this->SendRequest($sCommandPrefix.$sCmd, $aRequest);
-		$aResult = $this->parseResponseWithValidation();
+		$sCont = $this->SendRequest($sCommandPrefix.$sCmd, $aRequest, true);
+		if ('' !== $sCont)
+		{
+			$aResult = $this->parseResponseWithValidation();
+			$oItem = $this->findLastResponse($aResult);
+
+			if ($oItem && \MailSo\Imap\Enumerations\ResponseType::CONTINUATION === $oItem->ResponseType)
+			{
+				$aParts = explode("\r\n", $sCont);
+				foreach ($aParts as $sLine)
+				{
+					$this->sendRaw($sLine);
+
+					$aResult = $this->parseResponseWithValidation();
+					$oItem = $this->findLastResponse($aResult);
+					if ($oItem && \MailSo\Imap\Enumerations\ResponseType::CONTINUATION === $oItem->ResponseType)
+					{
+						continue;
+					}
+				}
+			}
+		}
+		else
+		{
+			$aResult = $this->parseResponseWithValidation();
+		}
 
 		$aReturn = array();
 		$oImapResponse = null;
@@ -1614,13 +1703,14 @@ class ImapClient extends \MailSo\Net\NetClient
 	/**
 	 * @param string $sCommand
 	 * @param array $aParams = array()
+	 * @param bool $bBreakOnLiteral = false
 	 *
-	 * @return void
+	 * @return string
 	 *
 	 * @throws \MailSo\Base\Exceptions\InvalidArgumentException
 	 * @throws \MailSo\Net\Exceptions\Exception
 	 */
-	public function SendRequest($sCommand, $aParams = array())
+	public function SendRequest($sCommand, $aParams = array(), $bBreakOnLiteral = false)
 	{
 		if (!\MailSo\Base\Validator::NotEmptyString($sCommand, true) || !\is_array($aParams))
 		{
@@ -1644,7 +1734,23 @@ class ImapClient extends \MailSo\Net\NetClient
 		}
 
 		$this->aTagTimeouts[$sTag] = \microtime(true);
+
+		if ($bBreakOnLiteral && !\preg_match('/\d\+\}\r\n/', $sRealCommand))
+		{
+			$iPos = \strpos($sRealCommand, "}\r\n");
+			if (false !== $iPos)
+			{
+				$iFakePos = \strpos($sFakeCommand, "}\r\n");
+
+				$this->sendRaw(\substr($sRealCommand, 0, $iPos + 1), true,
+					false !== $iFakePos ? \substr($sFakeCommand, 0, $iFakePos + 3) : '');
+
+				return \substr($sRealCommand, $iPos + 3);
+			}
+		}
+
 		$this->sendRaw($sRealCommand, true, $sFakeCommand);
+		return '';
 	}
 
 	/**
@@ -1843,7 +1949,7 @@ class ImapClient extends \MailSo\Net\NetClient
 	 * @throws \MailSo\Net\Exceptions\Exception
 	 */
 	private function partialParseResponseBranch(&$oImapResponse, $iStackIndex = -1,
-		$bTreatAsAtom = false, $sParentToken = '')
+		$bTreatAsAtom = false, $sParentToken = '', $sOpenBracket = '')
 	{
 		$mNull = null;
 
@@ -1974,7 +2080,7 @@ class ImapClient extends \MailSo\Net\NetClient
 				if ($bTreatAsAtom)
 				{
 					$sAtomBlock = $this->partialParseResponseBranch($mNull, $iStackIndex, true,
-						null === $sPreviousAtomUpperCase ? '' : \strtoupper($sPreviousAtomUpperCase));
+						null === $sPreviousAtomUpperCase ? '' : \strtoupper($sPreviousAtomUpperCase), $sOpenBracket);
 
 					$sAtomBuilder .= $sAtomBlock;
 					$iPos = $this->iResponseBufParsedPos;
@@ -1989,7 +2095,7 @@ class ImapClient extends \MailSo\Net\NetClient
 			else if ($bIsGotoNotAtomBracket)
 			{
 				$aSubItems = $this->partialParseResponseBranch($mNull, $iStackIndex, false,
-					null === $sPreviousAtomUpperCase ? '' : \strtoupper($sPreviousAtomUpperCase));
+					null === $sPreviousAtomUpperCase ? '' : \strtoupper($sPreviousAtomUpperCase), $sOpenBracket);
 
 				$aList[] = $aSubItems;
 				$iPos = $this->iResponseBufParsedPos;
@@ -2019,27 +2125,36 @@ class ImapClient extends \MailSo\Net\NetClient
 				$sChar = $this->sResponseBuffer[$iPos];
 			}
 
-			switch ($sChar)
+			switch (true)
 			{
-				case ']':
-				case ')':
+				case ']' === $sChar:
 					$iPos++;
 					$sPreviousAtomUpperCase = null;
 					$bIsEndOfList = true;
 					break;
-				case ' ':
+				case ')' === $sChar:
+					$iPos++;
+					$sPreviousAtomUpperCase = null;
+					$bIsEndOfList = true;
+					break;
+				case ' ' === $sChar:
 					if ($bTreatAsAtom)
 					{
 						$sAtomBuilder .= ' ';
 					}
 					$iPos++;
 					break;
-				case '[':
+				case '[' === $sChar:
 					$bIsClosingBracketSquare = true;
-				case '(':
+				case '(' === $sChar:
+					if ('(' === $sChar)
+					{
+						$bIsClosingBracketSquare = false;
+					}
+
 					if ($bTreatAsAtom)
 					{
-						$sAtomBuilder .= ($bIsClosingBracketSquare) ? '[' : '(';
+						$sAtomBuilder .= $bIsClosingBracketSquare ? '[' : '(';
 					}
 					$iPos++;
 
@@ -2047,13 +2162,15 @@ class ImapClient extends \MailSo\Net\NetClient
 					if ($bTreatAsAtom)
 					{
 						$bIsGotoAtomBracket = true;
+						$sOpenBracket = $bIsClosingBracketSquare ? '[' : '(';
 					}
 					else
 					{
 						$bIsGotoNotAtomBracket = true;
+						$sOpenBracket = $bIsClosingBracketSquare ? '[' : '(';
 					}
 					break;
-				case '{':
+				case '{' === $sChar:
 					$bIsLiteralParsed = false;
 					$mLiteralEndPos = \strpos($this->sResponseBuffer, '}', $iPos);
 					if (false !== $mLiteralEndPos && $mLiteralEndPos > $iPos)
@@ -2074,7 +2191,7 @@ class ImapClient extends \MailSo\Net\NetClient
 					}
 					$sPreviousAtomUpperCase = null;
 					break;
-				case '"':
+				case '"' === $sChar:
 					$bIsQuotedParsed = false;
 					while (true)
 					{
@@ -2160,7 +2277,7 @@ class ImapClient extends \MailSo\Net\NetClient
 					$sPreviousAtomUpperCase = null;
 					break;
 
-				case 'GOTO_DEFAULT':
+				case 'GOTO_DEFAULT' === $sChar:
 				default:
 					$iCharBlockStartPos = $iPos;
 
@@ -2168,7 +2285,7 @@ class ImapClient extends \MailSo\Net\NetClient
 					{
 						$iPos = $iBufferEndIndex;
 
-						while ($iPos > $iCharBlockStartPos && $this->sResponseBuffer[$iCharBlockStartPos] == ' ')
+						while ($iPos > $iCharBlockStartPos && $this->sResponseBuffer[$iCharBlockStartPos] === ' ')
 						{
 							$iCharBlockStartPos++;
 						}
@@ -2178,9 +2295,9 @@ class ImapClient extends \MailSo\Net\NetClient
 					while (!$bIsAtomDone && ($iPos <= $iBufferEndIndex))
 					{
 						$sCharDef = $this->sResponseBuffer[$iPos];
-						switch ($sCharDef)
+						switch (true)
 						{
-							case '[':
+							case '[' === $sCharDef:
 								if (null === $sAtomBuilder)
 								{
 									$sAtomBuilder = '';
@@ -2192,7 +2309,7 @@ class ImapClient extends \MailSo\Net\NetClient
 								$this->iResponseBufParsedPos = $iPos;
 
 								$sListBlock = $this->partialParseResponseBranch($mNull, $iStackIndex, true,
-									null === $sPreviousAtomUpperCase ? '' : \strtoupper($sPreviousAtomUpperCase));
+									null === $sPreviousAtomUpperCase ? '' : \strtoupper($sPreviousAtomUpperCase), '[');
 
 								if (null !== $sListBlock)
 								{
@@ -2202,9 +2319,9 @@ class ImapClient extends \MailSo\Net\NetClient
 								$iPos = $this->iResponseBufParsedPos;
 								$iCharBlockStartPos = $iPos;
 								break;
-							case ' ':
-							case ']':
-							case ')':
+							case ' ' === $sCharDef:
+							case ')' === $sCharDef && '(' === $sOpenBracket:
+							case ']' === $sCharDef && '[' === $sOpenBracket:
 								$bIsAtomDone = true;
 								break;
 							default:

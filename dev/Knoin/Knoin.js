@@ -139,6 +139,9 @@
 			ViewModelClass.__builded = true;
 			ViewModelClass.__vm = oViewModel;
 
+			oViewModel.onShowTrigger = ko.observable(false);
+			oViewModel.onHideTrigger = ko.observable(false);
+
 			oViewModel.viewModelName = ViewModelClass.__name;
 			oViewModel.viewModelNames = ViewModelClass.__names;
 
@@ -167,11 +170,23 @@
 							Globals.popupVisibilityNames.push(this.viewModelName);
 							oViewModel.viewModelDom.css('z-index', 3000 + Globals.popupVisibilityNames().length + 10);
 
-							Utils.delegateRun(this, 'onFocus', [], 500);
+							if (this.onShowTrigger)
+							{
+								this.onShowTrigger(!this.onShowTrigger());
+							}
+
+							Utils.delegateRun(this, 'onShowWithDelay', [], 500);
 						}
 						else
 						{
 							Utils.delegateRun(this, 'onHide');
+							Utils.delegateRun(this, 'onHideWithDelay', [], 500);
+
+							if (this.onHideTrigger)
+							{
+								this.onHideTrigger(!this.onHideTrigger());
+							}
+
 							this.restoreKeyScope();
 
 							_.each(this.viewModelNames, function (sName) {
@@ -180,8 +195,6 @@
 
 							Globals.popupVisibilityNames.remove(this.viewModelName);
 							oViewModel.viewModelDom.css('z-index', 2000);
-
-							Globals.tooltipTrigger(!Globals.tooltipTrigger());
 
 							_.delay(function () {
 								self.viewModelDom.hide();
@@ -196,7 +209,7 @@
 				});
 
 				ko.applyBindingAccessorsToNode(oViewModelDom[0], {
-					'i18nInit': true,
+					'translatorInit': true,
 					'template': function () { return {'name': oViewModel.viewModelTemplate()};}
 				}, oViewModel);
 
@@ -242,7 +255,10 @@
 
 			if (ViewModelClassToShow.__vm && ViewModelClassToShow.__dom)
 			{
+				Utils.delegateRun(ViewModelClassToShow.__vm, 'onBeforeShow', aParameters || []);
+
 				ViewModelClassToShow.__vm.modalVisibility(true);
+
 				Utils.delegateRun(ViewModelClassToShow.__vm, 'onShow', aParameters || []);
 
 				_.each(ViewModelClassToShow.__names, function (sName) {
@@ -270,6 +286,7 @@
 		var
 			self = this,
 			oScreen = null,
+			bSameScreen= false,
 			oCross = null
 		;
 
@@ -293,6 +310,8 @@
 
 			if (oScreen && oScreen.__started)
 			{
+				bSameScreen = this.oCurrentScreen && oScreen === this.oCurrentScreen;
+
 				if (!oScreen.__builded)
 				{
 					oScreen.__builded = true;
@@ -310,9 +329,15 @@
 				_.defer(function () {
 
 					// hide screen
-					if (self.oCurrentScreen)
+					if (self.oCurrentScreen && !bSameScreen)
 					{
 						Utils.delegateRun(self.oCurrentScreen, 'onHide');
+						Utils.delegateRun(self.oCurrentScreen, 'onHideWithDelay', [], 500);
+
+						if (self.oCurrentScreen.onHideTrigger)
+						{
+							self.oCurrentScreen.onHideTrigger(!self.oCurrentScreen.onHideTrigger());
+						}
 
 						if (Utils.isNonEmptyArray(self.oCurrentScreen.viewModels()))
 						{
@@ -323,7 +348,14 @@
 								{
 									ViewModelClass.__dom.hide();
 									ViewModelClass.__vm.viewModelVisibility(false);
+
 									Utils.delegateRun(ViewModelClass.__vm, 'onHide');
+									Utils.delegateRun(ViewModelClass.__vm, 'onHideWithDelay', [], 500);
+
+									if (ViewModelClass.__vm.onHideTrigger)
+									{
+										ViewModelClass.__vm.onHideTrigger(!ViewModelClass.__vm.onHideTrigger());
+									}
 								}
 
 							});
@@ -334,9 +366,13 @@
 					self.oCurrentScreen = oScreen;
 
 					// show screen
-					if (self.oCurrentScreen)
+					if (self.oCurrentScreen && !bSameScreen)
 					{
 						Utils.delegateRun(self.oCurrentScreen, 'onShow');
+						if (self.oCurrentScreen.onShowTrigger)
+						{
+							self.oCurrentScreen.onShowTrigger(!self.oCurrentScreen.onShowTrigger());
+						}
 
 						Plugins.runHook('screen-on-show', [self.oCurrentScreen.screenName(), self.oCurrentScreen]);
 
@@ -347,11 +383,18 @@
 								if (ViewModelClass.__vm && ViewModelClass.__dom &&
 									'Popups' !== ViewModelClass.__vm.viewModelPosition())
 								{
+									Utils.delegateRun(ViewModelClass.__vm, 'onBeforeShow');
+
 									ViewModelClass.__dom.show();
 									ViewModelClass.__vm.viewModelVisibility(true);
 
 									Utils.delegateRun(ViewModelClass.__vm, 'onShow');
-									Utils.delegateRun(ViewModelClass.__vm, 'onFocus', [], 200);
+									if (ViewModelClass.__vm.onShowTrigger)
+									{
+										ViewModelClass.__vm.onShowTrigger(!ViewModelClass.__vm.onShowTrigger());
+									}
+
+									Utils.delegateRun(ViewModelClass.__vm, 'onShowWithDelay', [], 200);
 
 									_.each(ViewModelClass.__names, function (sName) {
 										Plugins.runHook('view-model-on-show', [sName, ViewModelClass.__vm]);
@@ -384,19 +427,22 @@
 
 		_.each(aScreensClasses, function (CScreen) {
 
-				var
-					oScreen = new CScreen(),
-					sScreenName = oScreen ? oScreen.screenName() : ''
-				;
-
-				if (oScreen && '' !== sScreenName)
+				if (CScreen)
 				{
-					if ('' === this.sDefaultScreenName)
-					{
-						this.sDefaultScreenName = sScreenName;
-					}
+					var
+						oScreen = new CScreen(),
+						sScreenName = oScreen ? oScreen.screenName() : ''
+					;
 
-					this.oScreens[sScreenName] = oScreen;
+					if (oScreen && '' !== sScreenName)
+					{
+						if ('' === this.sDefaultScreenName)
+						{
+							this.sDefaultScreenName = sScreenName;
+						}
+
+						this.oScreens[sScreenName] = oScreen;
+					}
 				}
 
 			}, this);
@@ -427,7 +473,11 @@
 
 		_.delay(function () {
 			Globals.$html.removeClass('rl-started-trigger').addClass('rl-started');
-		}, 50);
+		}, 100);
+
+		_.delay(function () {
+			Globals.$html.addClass('rl-started-delay');
+		}, 200);
 	};
 
 	/**

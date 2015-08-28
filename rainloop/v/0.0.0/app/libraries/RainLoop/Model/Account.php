@@ -65,6 +65,7 @@ class Account extends \RainLoop\Account // for backward compatibility
 		$this->sSignMeToken = $sSignMeToken;
 		$this->sProxyAuthUser = $sProxyAuthUser;
 		$this->sProxyAuthPassword = $sProxyAuthPassword;
+		$this->sParentEmail = '';
 	}
 
 	/**
@@ -122,6 +123,14 @@ class Account extends \RainLoop\Account // for backward compatibility
 	public function ParentEmailHelper()
 	{
 		return 0 < \strlen($this->sParentEmail) ? $this->sParentEmail : $this->sEmail;
+	}
+
+	/**
+	 * @return string
+	 */
+	public function IsAdditionalAccount()
+	{
+		return 0 < \strlen($this->sParentEmail);
 	}
 
 	/**
@@ -226,7 +235,7 @@ class Account extends \RainLoop\Account // for backward compatibility
 	 */
 	public function SetParentEmail($sParentEmail)
 	{
-		$this->sParentEmail = \MailSo\Base\Utils::IdnToAscii($sParentEmail, true);
+		$this->sParentEmail = \trim(\MailSo\Base\Utils::IdnToAscii($sParentEmail, true));
 	}
 
 	/**
@@ -308,6 +317,38 @@ class Account extends \RainLoop\Account // for backward compatibility
 	/**
 	 * @return string
 	 */
+	public function DomainSieveHost()
+	{
+		return $this->Domain()->SieveHost();
+	}
+
+	/**
+	 * @return int
+	 */
+	public function DomainSievePort()
+	{
+		return $this->Domain()->SievePort();
+	}
+
+	/**
+	 * @return int
+	 */
+	public function DomainSieveSecure()
+	{
+		return $this->Domain()->SieveSecure();
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function DomainSieveAllowRaw()
+	{
+		return $this->Domain()->SieveAllowRaw();
+	}
+
+	/**
+	 * @return string
+	 */
 	public function GetAuthToken()
 	{
 		return \RainLoop\Utils::EncodeKeyValues(array(
@@ -321,7 +362,27 @@ class Account extends \RainLoop\Account // for backward compatibility
 			\RainLoop\Utils::GetShortToken(),	// 7
 			$this->sProxyAuthUser,				// 8
 			$this->sProxyAuthPassword,			// 9
-			0									// 10
+			0									// 10 // timelife
+		));
+	}
+
+	/**
+	 * @return string
+	 */
+	public function GetAuthTokenQ()
+	{
+		return \RainLoop\Utils::EncodeKeyValuesQ(array(
+			'token',							// 0
+			$this->sEmail,						// 1
+			$this->sLogin,						// 2
+			$this->sPassword,					// 3
+			\RainLoop\Utils::Fingerprint(),		// 4
+			$this->sSignMeToken,				// 5
+			$this->sParentEmail,				// 6
+			\RainLoop\Utils::GetShortToken(),	// 7
+			$this->sProxyAuthUser,				// 8
+			$this->sProxyAuthPassword,			// 9
+			0									// 10 // timelife
 		));
 	}
 
@@ -376,8 +437,18 @@ class Account extends \RainLoop\Account // for backward compatibility
 			}
 			else
 			{
-				$oMailClient->Login($aImapCredentials['Login'], $aImapCredentials['Password'], '',
-					$aImapCredentials['UseAuthPlainIfSupported']);
+				$iGatLen = \strlen(APP_GOOGLE_ACCESS_TOKEN_PREFIX);
+				$sPassword = $aImapCredentials['Password'];
+				if (APP_GOOGLE_ACCESS_TOKEN_PREFIX === \substr($sPassword, 0, $iGatLen))
+				{
+					$oMailClient->LoginWithXOauth2(
+						\base64_encode('user='.$aImapCredentials['Login']."\1".'auth=Bearer '.\substr($sPassword, $iGatLen)."\1\1"));
+				}
+				else
+				{
+					$oMailClient->Login($aImapCredentials['Login'], $aImapCredentials['Password'], '',
+						$aImapCredentials['UseAuthPlainIfSupported']);
+				}
 			}
 
 			$bLogin = true;
@@ -434,12 +505,70 @@ class Account extends \RainLoop\Account // for backward compatibility
 
 		if ($aSmtpCredentials['UseAuth'] && !$aSmtpCredentials['UsePhpMail'] && $oSmtpClient)
 		{
-			$oSmtpClient->Login($aSmtpCredentials['Login'], $aSmtpCredentials['Password']);
+			$iGatLen = \strlen(APP_GOOGLE_ACCESS_TOKEN_PREFIX);
+			$sPassword = $aSmtpCredentials['Password'];
+			if (APP_GOOGLE_ACCESS_TOKEN_PREFIX === \substr($sPassword, 0, $iGatLen))
+			{
+				$oSmtpClient->LoginWithXOauth2(
+					\base64_encode('user='.$aSmtpCredentials['Login']."\1".'auth=Bearer '.\substr($sPassword, $iGatLen)."\1\1"));
+			}
+			else
+			{
+				$oSmtpClient->Login($aSmtpCredentials['Login'], $aSmtpCredentials['Password']);
+			}
 
 			$bLogin = true;
 		}
 
 		$oPlugins->RunHook('event.smtp-post-login', array($this, $aSmtpCredentials['UseAuth'], $bLogin, $aSmtpCredentials));
+
+		return $bLogin;
+	}
+
+	/**
+	 * @param \RainLoop\Plugins\Manager $oPlugins
+	 * @param \MailSo\Sieve\ManageSieveClient $oSieveClient
+	 * @param \RainLoop\Application $oConfig
+	 */
+	public function SieveConnectAndLoginHelper($oPlugins, $oSieveClient, $oConfig)
+	{
+		$bLogin = false;
+
+		$aSieveCredentials = array(
+			'UseConnect' => true,
+			'UseAuth' => true,
+			'Host' => $this->DomainSieveHost(),
+			'Port' => $this->DomainSievePort(),
+			'Secure' => $this->DomainSieveSecure(),
+			'Login' => $this->IncLogin(),
+			'Password' => $this->Password(),
+			'VerifySsl' => !!$oConfig->Get('ssl', 'verify_certificate', false),
+			'AllowSelfSigned' => !!$oConfig->Get('ssl', 'allow_self_signed', true)
+		);
+
+		$oPlugins->RunHook('filter.sieve-credentials', array($this, &$aSieveCredentials));
+
+		$oPlugins->RunHook('event.sieve-pre-connect', array($this, $aSieveCredentials['UseConnect'], $aSieveCredentials));
+
+		if ($aSieveCredentials['UseConnect'] && $oSieveClient)
+		{
+			$oSieveClient->Connect($aSieveCredentials['Host'], $aSieveCredentials['Port'],
+				$aSieveCredentials['Secure'], $aSieveCredentials['VerifySsl'], $aSieveCredentials['AllowSelfSigned']
+			);
+		}
+
+		$oPlugins->RunHook('event.sieve-post-connect', array($this, $aSieveCredentials['UseConnect'], $aSieveCredentials));
+
+		$oPlugins->RunHook('event.sieve-pre-login', array($this, $aSieveCredentials['UseAuth'], $aSieveCredentials));
+
+		if ($aSieveCredentials['UseAuth'])
+		{
+			$oSieveClient->Login($aSieveCredentials['Login'], $aSieveCredentials['Password']);
+
+			$bLogin = true;
+		}
+
+		$oPlugins->RunHook('event.sieve-post-login', array($this, $aSieveCredentials['UseAuth'], $bLogin, $aSieveCredentials));
 
 		return $bLogin;
 	}

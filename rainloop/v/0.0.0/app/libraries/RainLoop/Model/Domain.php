@@ -84,6 +84,11 @@ class Domain
 	private $iSieveSecure;
 
 	/**
+	 * @var bool
+	 */
+	private $bSieveAllowRaw;
+
+	/**
 	 * @var string
 	 */
 	private $sWhiteList;
@@ -129,6 +134,8 @@ class Domain
 		$this->sSieveHost = $sSieveHost;
 		$this->iSievePort = $iSievePort;
 		$this->iSieveSecure = $iSieveSecure;
+
+		$this->bSieveAllowRaw = false;
 
 		$this->sWhiteList = \trim($sWhiteList);
 	}
@@ -184,9 +191,10 @@ class Domain
 				!empty($aDomain['imap_secure']) ? $aDomain['imap_secure'] : '');
 
 			$bUseSieve = isset($aDomain['sieve_use']) ? (bool) $aDomain['sieve_use'] : false;
+			$bSieveAllowRaw = isset($aDomain['sieve_allow_raw']) ? (bool) $aDomain['sieve_allow_raw'] : false;
 
 			$sSieveHost = empty($aDomain['sieve_host']) ? '' : (string) $aDomain['sieve_host'];
-			$iSievePort = empty($aDomain['sieve_port']) ? 2000 : (int) $aDomain['sieve_port'];
+			$iSievePort = empty($aDomain['sieve_port']) ? 4190 : (int) $aDomain['sieve_port'];
 			$iSieveSecure = self::StrConnectionSecurityTypeToCons(
 				!empty($aDomain['sieve_secure']) ? $aDomain['sieve_secure'] : '');
 
@@ -207,6 +215,8 @@ class Domain
 				$bUseSieve, $sSieveHost, $iSievePort, $iSieveSecure,
 				$sOutHost, $iOutPort, $iOutSecure, $bOutShortLogin, $bOutAuth, $bOutUsePhpMail,
 				$sWhiteList);
+
+			$oDomain->SetSieveAllowRaw($bSieveAllowRaw);
 		}
 
 		return $oDomain;
@@ -236,7 +246,7 @@ class Domain
 
 		if ($this->iSievePort <= 0)
 		{
-			$this->iSievePort = 2000;
+			$this->iSievePort = 4190;
 		}
 
 		if ($this->iOutPort <= 0)
@@ -257,6 +267,7 @@ class Domain
 			'imap_secure = "'.self::ConstConnectionSecurityTypeToStr($this->iIncSecure).'"',
 			'imap_short_login = '.($this->bIncShortLogin ? 'On' : 'Off'),
 			'sieve_use = '.($this->bUseSieve ? 'On' : 'Off'),
+			'sieve_allow_raw = '.($this->bSieveAllowRaw ? 'On' : 'Off'),
 			'sieve_host = "'.$this->encodeIniString($this->sSieveHost).'"',
 			'sieve_port = '.$this->iSievePort,
 			'sieve_secure = "'.self::ConstConnectionSecurityTypeToStr($this->iSieveSecure).'"',
@@ -428,6 +439,22 @@ class Domain
 	}
 
 	/**
+	 * @return bool
+	 */
+	public function SieveAllowRaw()
+	{
+		return $this->bSieveAllowRaw;
+	}
+
+	/**
+	 * @param bool $bSieveAllowRaw
+	 */
+	public function SetSieveAllowRaw($bSieveAllowRaw)
+	{
+		$this->bSieveAllowRaw = !!$bSieveAllowRaw;
+	}
+
+	/**
 	 * @return string
 	 */
 	public function OutHost()
@@ -495,13 +522,13 @@ class Domain
 		if (0 < strlen($sW))
 		{
 			$sEmail = \MailSo\Base\Utils::IdnToUtf8($sEmail, true);
-			$sLogin = \MailSo\Base\Utils::IdnToUtf8($sLogin);
+			$sLogin = \MailSo\Base\Utils::IdnToUtf8($sLogin, true);
 
 			$sW = \preg_replace('/([^\s]+)@[^\s]*/', '$1', $sW);
 			$sW = ' '.\trim(\preg_replace('/[\s;,\r\n\t]+/', ' ', $sW)).' ';
 
 			$sUserPart = \MailSo\Base\Utils::GetAccountNameFromEmail(0 < \strlen($sLogin) ? $sLogin : $sEmail);
-			return false !== \strpos($sW, ' '.$sUserPart.' ');
+			return false !== \stripos($sW, ' '.$sUserPart.' ');
 		}
 
 		return true;
@@ -524,6 +551,7 @@ class Domain
 			'SieveHost' => $bAjax ? \MailSo\Base\Utils::IdnToUtf8($this->SieveHost()) : $this->SieveHost(),
 			'SievePort' => $this->SievePort(),
 			'SieveSecure' => $this->SieveSecure(),
+			'SieveAllowRaw' => $this->SieveAllowRaw(),
 			'OutHost' => $bAjax ? \MailSo\Base\Utils::IdnToUtf8($this->OutHost()) : $this->OutHost(),
 			'OutPort' => $this->OutPort(),
 			'OutSecure' => $this->OutSecure(),

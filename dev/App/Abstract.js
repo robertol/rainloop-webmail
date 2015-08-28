@@ -7,11 +7,14 @@
 		window = require('window'),
 		_ = require('_'),
 		$ = require('$'),
+		key = require('key'),
 
 		Globals = require('Common/Globals'),
+		Enums = require('Common/Enums'),
 		Utils = require('Common/Utils'),
 		Links = require('Common/Links'),
 		Events = require('Common/Events'),
+		Translator = require('Common/Translator'),
 
 		Settings = require('Storage/Settings'),
 
@@ -44,10 +47,41 @@
 					oEvent.originalEvent.lineno,
 					window.location && window.location.toString ? window.location.toString() : '',
 					Globals.$html.attr('class'),
-					Utils.microtime() - Globals.now
+					Utils.microtime() - Globals.startMicrotime
 				);
 			}
 		});
+
+		Globals.$win.on('resize', function () {
+			Events.pub('window.resize');
+		});
+
+		Events.sub('window.resize', _.throttle(function () {
+
+			var
+				iH = Globals.$win.height(),
+				iW = Globals.$win.height()
+			;
+
+			if (Globals.$win.__sizes[0] !== iH || Globals.$win.__sizes[1] !== iW)
+			{
+				Globals.$win.__sizes[0] = iH;
+				Globals.$win.__sizes[1] = iW;
+
+				Events.pub('window.resize.real');
+			}
+
+		}, 50));
+
+		 // DEBUG
+//		Events.sub({
+//			'window.resize': function () {
+//				window.console.log('window.resize');
+//			},
+//			'window.resize.real': function () {
+//				window.console.log('window.resize.real');
+//			}
+//		});
 
 		Globals.$doc.on('keydown', function (oEvent) {
 			if (oEvent && oEvent.ctrlKey)
@@ -60,6 +94,14 @@
 				Globals.$html.removeClass('rl-ctrl-key-pressed');
 			}
 		});
+
+		Globals.$doc.on('mousemove keypress click', _.debounce(function () {
+			Events.pub('rl.auto-logout-refresh');
+		}, 5000));
+
+		key('esc, enter', Enums.KeyState.All, _.bind(function () {
+			Utils.detectDropdownVisibility();
+		}, this));
 	}
 
 	_.extend(AbstractApp.prototype, AbstractBoot.prototype);
@@ -136,7 +178,7 @@
 	/**
 	 * @param {string} sTitle
 	 */
-	AbstractApp.prototype.setTitle = function (sTitle)
+	AbstractApp.prototype.setWindowTitle = function (sTitle)
 	{
 		sTitle = ((Utils.isNormal(sTitle) && 0 < sTitle.length) ? sTitle + ' - ' : '') +
 			Settings.settingsGet('Title') || '';
@@ -161,10 +203,25 @@
 	};
 
 	/**
+	 * @param {string} sKey
+	 */
+	AbstractApp.prototype.setClientSideToken = function (sKey)
+	{
+		if (window.__rlah_set)
+		{
+			window.__rlah_set(sKey);
+
+			require('Storage/Settings').settingsSet('AuthAccountHash', sKey);
+			require('Common/Links').populateAuthSuffix();
+		}
+	};
+
+	/**
+	 * @param {boolean=} bAdmin = false
 	 * @param {boolean=} bLogout = false
 	 * @param {boolean=} bClose = false
 	 */
-	AbstractApp.prototype.loginAndLogoutReload = function (bLogout, bClose)
+	AbstractApp.prototype.loginAndLogoutReload = function (bAdmin, bLogout, bClose)
 	{
 		var
 			kn = require('Knoin/Knoin'),
@@ -185,7 +242,8 @@
 			window.close();
 		}
 
-		sCustomLogoutLink = sCustomLogoutLink || './';
+		sCustomLogoutLink = sCustomLogoutLink || (bAdmin ? Links.rootAdmin() : Links.rootUser());
+
 		if (bLogout && window.location.href !== sCustomLogoutLink)
 		{
 			_.delay(function () {
@@ -225,6 +283,8 @@
 
 	AbstractApp.prototype.bootstart = function ()
 	{
+		Utils.log('Ps' + 'ss, hac' + 'kers! The' + 're\'s not' + 'hing inte' + 'resting :' + ')');
+
 		Events.pub('rl.bootstart');
 
 		var
@@ -235,26 +295,28 @@
 		ko.components.register('SaveTrigger', require('Component/SaveTrigger'));
 		ko.components.register('Input', require('Component/Input'));
 		ko.components.register('Select', require('Component/Select'));
-		ko.components.register('TextArea', require('Component/TextArea'));
 		ko.components.register('Radio', require('Component/Radio'));
+		ko.components.register('TextArea', require('Component/TextArea'));
 
-		if (Settings.settingsGet('MaterialDesign') && Globals.bAnimationSupported)
+		ko.components.register('x-script', require('Component/Script'));
+		ko.components.register('svg-icon', require('Component/SvgIcon'));
+
+		if (/**false && /**/Settings.settingsGet('MaterialDesign') && Globals.bAnimationSupported)
 		{
 			ko.components.register('Checkbox', require('Component/MaterialDesign/Checkbox'));
+			ko.components.register('CheckboxSimple', require('Component/Checkbox'));
 		}
 		else
 		{
 //			ko.components.register('Checkbox', require('Component/Classic/Checkbox'));
+//			ko.components.register('CheckboxSimple', require('Component/Classic/Checkbox'));
 			ko.components.register('Checkbox', require('Component/Checkbox'));
+			ko.components.register('CheckboxSimple', require('Component/Checkbox'));
 		}
 
-		Utils.initOnStartOrLangChange(function () {
-			Utils.initNotificationLanguage();
-		}, null);
+		Translator.initOnStartOrLangChange(Translator.initNotificationLanguage, Translator);
 
-		_.delay(function () {
-			Utils.windowResize();
-		}, 1000);
+		_.delay(Utils.windowResizeCallback, 1000);
 
 		ssm.addState({
 			'id': 'mobile',
@@ -316,7 +378,16 @@
 			Globals.$html.toggleClass('rl-left-panel-disabled', bValue);
 		});
 
+		Globals.leftPanelType.subscribe(function (sValue) {
+			Globals.$html.toggleClass('rl-left-panel-none', 'none' === sValue);
+			Globals.$html.toggleClass('rl-left-panel-short', 'short' === sValue);
+		});
+
 		ssm.ready();
+
+		require('Stores/Language').populate();
+		require('Stores/Theme').populate();
+		require('Stores/Social').populate();
 	};
 
 	module.exports = AbstractApp;

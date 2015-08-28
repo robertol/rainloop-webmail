@@ -6,11 +6,11 @@
 	var
 		_ = require('_'),
 		ko = require('ko'),
-		moment = require('moment'),
 
 		Utils = require('Common/Utils'),
+		Translator = require('Common/Translator'),
 
-		Data = require('Storage/User/Data'),
+		MessageStore = require('Stores/User/Message'),
 
 		kn = require('Knoin/Knoin'),
 		AbstractView = require('Knoin/AbstractView')
@@ -41,11 +41,24 @@
 			var sSearch = this.buildSearchString();
 			if ('' !== sSearch)
 			{
-				Data.mainMessageListSearch(sSearch);
+				MessageStore.mainMessageListSearch(sSearch);
 			}
 
 			this.cancelCommand();
 		});
+
+		this.selectedDates = ko.computed(function () {
+			Translator.trigger();
+			return [
+				{'id': -1, 'name': Translator.i18n('SEARCH/LABEL_ADV_DATE_ALL')},
+				{'id': 3, 'name': Translator.i18n('SEARCH/LABEL_ADV_DATE_3_DAYS')},
+				{'id': 7, 'name': Translator.i18n('SEARCH/LABEL_ADV_DATE_7_DAYS')},
+				{'id': 30, 'name': Translator.i18n('SEARCH/LABEL_ADV_DATE_MONTH')},
+				{'id': 90, 'name': Translator.i18n('SEARCH/LABEL_ADV_DATE_3_MONTHS')},
+				{'id': 180, 'name': Translator.i18n('SEARCH/LABEL_ADV_DATE_6_MONTHS')},
+				{'id': 365, 'name': Translator.i18n('SEARCH/LABEL_ADV_DATE_YEAR')}
+			];
+		}, this);
 
 		kn.constructorEnd(this);
 	}
@@ -117,7 +130,7 @@
 
 		if (-1 < this.selectedDateValue())
 		{
-			aResult.push('date:' + moment().subtract('days', this.selectedDateValue()).format('YYYY.MM.DD') + '/');
+			aResult.push('date:' + require('Common/Momentor').searchSubtractFormatDateHelper(this.selectedDateValue()) + '/');
 		}
 
 		if (sText && '' !== sText)
@@ -148,7 +161,7 @@
 		this.clearPopup();
 	};
 
-	AdvancedSearchPopupView.prototype.onFocus = function ()
+	AdvancedSearchPopupView.prototype.onShowWithDelay = function ()
 	{
 		this.fromFocus(true);
 	};

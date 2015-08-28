@@ -7,113 +7,225 @@
 		window = require('window'),
 		_ = require('_'),
 		$ = require('$'),
+		JSON = require('JSON'),
+		Opentip = require('Opentip'),
 
-		fDisposalTooltipHelper = function (oElement, $oEl, oSubscription) {
+		fDisposalTooltipHelper = function (oElement) {
 			ko.utils.domNodeDisposal.addDisposeCallback(oElement, function () {
 
-				if (oSubscription && oSubscription.dispose)
+				if (oElement && oElement.__opentip)
 				{
-					oSubscription.dispose();
+					oElement.__opentip.deactivate();
 				}
-
-				if ($oEl)
-				{
-					$oEl.off('click.koTooltip');
-
-					if ($oEl.tooltip)
-					{
-						$oEl.tooltip('destroy');
-					}
-				}
-
-				$oEl = null;
 			});
 		}
 	;
+
+	ko.bindingHandlers.editor = {
+		'init': function (oElement, fValueAccessor) {
+
+			var
+				oEditor  = null,
+				fValue = fValueAccessor(),
+
+				fUpdateEditorValue = function () {
+					if (fValue && fValue.__editor)
+					{
+						fValue.__editor.setHtmlOrPlain(fValue());
+					}
+				},
+
+				fUpdateKoValue = function () {
+					if (fValue && fValue.__editor)
+					{
+						fValue(fValue.__editor.getDataWithHtmlMark());
+					}
+				},
+
+				fOnReady = function () {
+					fValue.__editor = oEditor;
+					fUpdateEditorValue();
+				},
+
+				HtmlEditor = require('Common/HtmlEditor')
+			;
+
+			if (ko.isObservable(fValue) && HtmlEditor)
+			{
+				oEditor = new HtmlEditor(oElement, fUpdateKoValue, fOnReady, fUpdateKoValue);
+
+				fValue.__fetchEditorValue = fUpdateKoValue;
+
+				fValue.subscribe(fUpdateEditorValue);
+
+//				ko.utils.domNodeDisposal.addDisposeCallback(oElement, function () {
+//				});
+			}
+		}
+	};
+
+	ko.bindingHandlers.json = {
+		'init': function (oElement, fValueAccessor) {
+			$(oElement).text(JSON.stringify(ko.unwrap(fValueAccessor())));
+		},
+		'update': function (oElement, fValueAccessor) {
+			$(oElement).text(JSON.stringify(ko.unwrap(fValueAccessor())));
+		}
+	};
 
 	ko.bindingHandlers.tooltip = {
 		'init': function (oElement, fValueAccessor) {
 
 			var
-				$oEl = null,
 				bi18n = true,
-				sClass  = '',
-				sPlacement  = '',
-				oSubscription = null,
-				Globals = require('Common/Globals'),
-				Utils = require('Common/Utils')
+				sValue = '',
+				Translator = null,
+				$oEl = $(oElement),
+				fValue = fValueAccessor(),
+				bMobile = 'on' === ($oEl.data('tooltip-mobile') || 'off'),
+				Globals = require('Common/Globals')
 			;
 
-			if (!Globals.bMobileDevice)
+			if (!Globals.bMobileDevice || bMobile)
 			{
-				$oEl = $(oElement);
-				sClass = $oEl.data('tooltip-class') || '';
 				bi18n = 'on' === ($oEl.data('tooltip-i18n') || 'on');
-				sPlacement = $oEl.data('tooltip-placement') || 'top';
+				sValue = !ko.isObservable(fValue) && _.isFunction(fValue) ? fValue() : ko.unwrap(fValue);
 
-				$oEl.tooltip({
-					'delay': {
-						'show': 500,
-						'hide': 100
-					},
-					'html': true,
-					'container': 'body',
-					'placement': sPlacement,
-					'trigger': 'hover',
-					'title': function () {
-						var sValue = bi18n ? ko.unwrap(fValueAccessor()) : fValueAccessor()();
-						return '' === sValue || $oEl.is('.disabled') || Globals.dropdownVisibility() ? '' :
-							'<span class="tooltip-class ' + sClass + '">' + (bi18n ? Utils.i18n(sValue) : sValue) + '</span>';
+				oElement.__opentip = new Opentip(oElement, {
+					'style': 'rainloopTip',
+					'element': oElement,
+					'tipJoint': $oEl.data('tooltip-join') || 'bottom'
+				});
+
+				Globals.dropdownVisibility.subscribe(function (bV) {
+					if (bV) {
+						oElement.__opentip.hide();
 					}
-				}).on('click.koTooltip', function () {
-					$oEl.tooltip('hide');
 				});
 
-				oSubscription = Globals.tooltipTrigger.subscribe(function () {
-					$oEl.tooltip('hide');
-				});
+				if ('' === sValue)
+				{
+					oElement.__opentip.hide();
+					oElement.__opentip.deactivate();
+					oElement.__opentip.setContent('');
+				}
+				else
+				{
+					oElement.__opentip.activate();
+				}
 
-				fDisposalTooltipHelper(oElement, $oEl, oSubscription);
+				if (bi18n)
+				{
+					Translator = require('Common/Translator');
+
+					oElement.__opentip.setContent(Translator.i18n(sValue));
+
+					Translator.trigger.subscribe(function () {
+						oElement.__opentip.setContent(Translator.i18n(sValue));
+					});
+
+					Globals.dropdownVisibility.subscribe(function () {
+						if (oElement && oElement.__opentip)
+						{
+							oElement.__opentip.setContent(require('Common/Translator').i18n(sValue));
+						}
+					});
+				}
+				else
+				{
+					oElement.__opentip.setContent(sValue);
+				}
+			}
+		},
+		'update': function (oElement, fValueAccessor) {
+
+			var
+				bi18n = true,
+				sValue = '',
+				$oEl = $(oElement),
+				fValue = fValueAccessor(),
+				bMobile = 'on' === ($oEl.data('tooltip-mobile') || 'off'),
+				Globals = require('Common/Globals')
+			;
+
+			if ((!Globals.bMobileDevice || bMobile) && oElement.__opentip)
+			{
+				bi18n = 'on' === ($oEl.data('tooltip-i18n') || 'on');
+				sValue = !ko.isObservable(fValue) && _.isFunction(fValue) ? fValue() : ko.unwrap(fValue);
+
+				if (sValue)
+				{
+					oElement.__opentip.setContent(
+						bi18n ? require('Common/Translator').i18n(sValue) : sValue);
+					oElement.__opentip.activate();
+				}
+				else
+				{
+					oElement.__opentip.hide();
+					oElement.__opentip.deactivate();
+					oElement.__opentip.setContent('');
+				}
 			}
 		}
 	};
 
-	ko.bindingHandlers.tooltipForTest = {
+	ko.bindingHandlers.tooltipErrorTip = {
 		'init': function (oElement) {
 
-			var
-				$oEl = $(oElement),
-				oSubscription = null,
-				Globals = require('Common/Globals')
-			;
+			var $oEl = $(oElement);
 
-			$oEl.tooltip({
-				'container': 'body',
-				'trigger': 'hover manual',
-				'title': function () {
-					return $oEl.data('tooltip3-data') || '';
+			oElement.__opentip = new Opentip(oElement, {
+				'style': 'rainloopErrorTip',
+				'hideOn': 'mouseout click',
+				'element': oElement,
+				'tipJoint': $oEl.data('tooltip-join') || 'top'
+			});
+
+			oElement.__opentip.deactivate();
+
+			$(window.document).on('click', function () {
+				if (oElement && oElement.__opentip)
+				{
+					oElement.__opentip.hide();
 				}
 			});
 
-			$(window.document).on('click', function () {
-				$oEl.tooltip('hide');
-			});
-
-			oSubscription = Globals.tooltipTrigger.subscribe(function () {
-				$oEl.tooltip('hide');
-			});
-
-			fDisposalTooltipHelper(oElement, $oEl, oSubscription);
+			fDisposalTooltipHelper(oElement);
 		},
 		'update': function (oElement, fValueAccessor) {
-			var sValue = ko.unwrap(fValueAccessor());
-			if ('' === sValue)
+
+			var
+				$oEl = $(oElement),
+				fValue = fValueAccessor(),
+				sValue = !ko.isObservable(fValue) && _.isFunction(fValue) ? fValue() : ko.unwrap(fValue),
+				oOpenTips = oElement.__opentip
+			;
+
+			if (oOpenTips)
 			{
-				$(oElement).data('tooltip3-data', '').tooltip('hide');
-			}
-			else
-			{
-				$(oElement).data('tooltip3-data', sValue).tooltip('show');
+				if ('' === sValue)
+				{
+					oOpenTips.hide();
+					oOpenTips.deactivate();
+					oOpenTips.setContent('');
+				}
+				else
+				{
+					_.delay(function () {
+						if ($oEl.is(':visible'))
+						{
+							oOpenTips.setContent(sValue);
+							oOpenTips.activate();
+							oOpenTips.show();
+						}
+						else
+						{
+							oOpenTips.hide();
+							oOpenTips.deactivate();
+							oOpenTips.setContent('');
+						}
+					}, 100);
+				}
 			}
 		}
 	};
@@ -124,8 +236,12 @@
 			if (Globals && Globals.aBootstrapDropdowns)
 			{
 				Globals.aBootstrapDropdowns.push($(oElement));
+
+				$(oElement).click(function () {
+					require('Common/Utils').detectDropdownVisibility();
+				});
+
 //				ko.utils.domNodeDisposal.addDisposeCallback(oElement, function () {
-//					// TODO
 //				});
 			}
 		}
@@ -135,17 +251,15 @@
 		'update': function (oElement, fValueAccessor) {
 			if (ko.unwrap(fValueAccessor()))
 			{
-				var
-					$oEl = $(oElement),
-					Utils = require('Common/Utils')
-				;
-
+				var $oEl = $(oElement);
 				if (!$oEl.hasClass('open'))
 				{
 					$oEl.find('.dropdown-toggle').dropdown('toggle');
-					Utils.detectDropdownVisibility();
 				}
 
+				$oEl.find('.dropdown-toggle').focus();
+
+				require('Common/Utils').detectDropdownVisibility();
 				fValueAccessor()(false);
 			}
 		}
@@ -171,8 +285,7 @@
 
 	ko.bindingHandlers.csstext = {
 		'init': function (oElement, fValueAccessor) {
-			var Utils = require('Common/Utils');
-			if (oElement && oElement.styleSheet && !Utils.isUnd(oElement.styleSheet.cssText))
+			if (oElement && oElement.styleSheet && undefined !== oElement.styleSheet.cssText)
 			{
 				oElement.styleSheet.cssText = ko.unwrap(fValueAccessor());
 			}
@@ -182,8 +295,7 @@
 			}
 		},
 		'update': function (oElement, fValueAccessor) {
-			var Utils = require('Common/Utils');
-			if (oElement && oElement.styleSheet && !Utils.isUnd(oElement.styleSheet.cssText))
+			if (oElement && oElement.styleSheet && undefined !== oElement.styleSheet.cssText)
 			{
 				oElement.styleSheet.cssText = ko.unwrap(fValueAccessor());
 			}
@@ -229,6 +341,36 @@
 		}
 	};
 
+	ko.bindingHandlers.onSpace = {
+		'init': function (oElement, fValueAccessor, fAllBindingsAccessor, oViewModel) {
+			$(oElement).on('keyup.koOnSpace', function (oEvent) {
+				if (oEvent && 32 === window.parseInt(oEvent.keyCode, 10))
+				{
+					fValueAccessor().call(oViewModel, oEvent);
+				}
+			});
+
+			ko.utils.domNodeDisposal.addDisposeCallback(oElement, function () {
+				$(oElement).off('keyup.koOnSpace');
+			});
+		}
+	};
+
+	ko.bindingHandlers.onTab = {
+		'init': function (oElement, fValueAccessor, fAllBindingsAccessor, oViewModel) {
+			$(oElement).on('keydown.koOnTab', function (oEvent) {
+				if (oEvent && 9 === window.parseInt(oEvent.keyCode, 10))
+				{
+					return fValueAccessor().call(oViewModel, !!oEvent.shiftKey);
+				}
+			});
+
+			ko.utils.domNodeDisposal.addDisposeCallback(oElement, function () {
+				$(oElement).off('keydown.koOnTab');
+			});
+		}
+	};
+
 	ko.bindingHandlers.onEsc = {
 		'init': function (oElement, fValueAccessor, fAllBindingsAccessor, oViewModel) {
 			$(oElement).on('keypress.koOnEsc', function (oEvent) {
@@ -266,9 +408,7 @@
 				'keyboard': false,
 				'show': ko.unwrap(fValueAccessor())
 			})
-			.on('shown.koModal', function () {
-				Utils.windowResize();
-			})
+			.on('shown.koModal', Utils.windowResizeCallback)
 			.find('.close').on('click.koModal', function () {
 				fValueAccessor()(false);
 			});
@@ -282,22 +422,51 @@
 			});
 		},
 		'update': function (oElement, fValueAccessor) {
-			$(oElement).modal(ko.unwrap(fValueAccessor()) ? 'show' : 'hide');
+
+			var Globals = require('Common/Globals');
+
+			$(oElement).modal(!!ko.unwrap(fValueAccessor()) ? 'show' : 'hide');
+
+			if (Globals.$html.hasClass('rl-anim'))
+			{
+				Globals.$html.addClass('rl-modal-animation');
+				_.delay(function () {
+					Globals.$html.removeClass('rl-modal-animation');
+				}, 400);
+			}
+
+		}
+	};
+
+	ko.bindingHandlers.moment = {
+		'init': function (oElement, fValueAccessor) {
+			require('Common/Momentor').momentToNode(
+				$(oElement).addClass('moment').data('moment-time', ko.unwrap(fValueAccessor()))
+			);
+		},
+		'update': function (oElement, fValueAccessor) {
+			require('Common/Momentor').momentToNode(
+				$(oElement).data('moment-time', ko.unwrap(fValueAccessor()))
+			);
 		}
 	};
 
 	ko.bindingHandlers.i18nInit = {
 		'init': function (oElement) {
-			var Utils = require('Common/Utils');
-			Utils.i18nToNode(oElement);
+			require('Common/Translator').i18nToNodes(oElement);
+		}
+	};
+
+	ko.bindingHandlers.translatorInit = {
+		'init': function (oElement) {
+			require('Common/Translator').i18nToNodes(oElement);
 		}
 	};
 
 	ko.bindingHandlers.i18nUpdate = {
 		'update': function (oElement, fValueAccessor) {
-			var Utils = require('Common/Utils');
 			ko.unwrap(fValueAccessor());
-			Utils.i18nToNode(oElement);
+			require('Common/Translator').i18nToNodes(oElement);
 		}
 	};
 
@@ -641,9 +810,9 @@
 				fAllBindings = fAllBindingsAccessor(),
 				fAutoCompleteSource = fAllBindings['autoCompleteSource'] || null,
 				fFocusCallback = function (bValue) {
-					if (fValue && fValue.focusTrigger)
+					if (fValue && fValue.focused)
 					{
-						fValue.focusTrigger(bValue);
+						fValue.focused(!!bValue);
 					}
 				}
 			;
@@ -652,9 +821,17 @@
 				'parseOnBlur': true,
 				'allowDragAndDrop': true,
 				'focusCallback': fFocusCallback,
-				'inputDelimiters': [',', ';'],
+				'inputDelimiters': [',', ';', "\n"],
 				'autoCompleteSource': fAutoCompleteSource,
+//				'elementHook': function (oEl, oItem) {
+//					if (oEl && oItem)
+//					{
+//						oEl.addClass('pgp');
+//						window.console.log(arguments);
+//					}
+//				},
 				'parseHook': function (aInput) {
+
 					return _.map(aInput, function (sInputValue) {
 
 						var
@@ -672,20 +849,73 @@
 						return [sValue, null];
 
 					});
+
+//					var aResult = [];
+//
+//					_.each(aInput, function (sInputValue) {
+//
+//						var
+//							aM = null,
+//							aValues = [],
+//							sValue = Utils.trim(sInputValue),
+//							oEmail = null
+//						;
+//
+//						if ('' !== sValue)
+//						{
+//							aM = sValue.match(/[@]/g);
+//							if (aM && 0 < aM.length)
+//							{
+//								sValue = sValue.replace(/[\r\n]+/g, '; ').replace(/[\s]+/g, ' ');
+//								aValues = EmailModel.splitHelper(sValue, ';');
+//
+//								_.each(aValues, function (sV) {
+//
+//									oEmail = new EmailModel();
+//									oEmail.mailsoParse(sV);
+//
+//									if (oEmail.email)
+//									{
+//										aResult.push([oEmail.toLine(false), oEmail]);
+//									}
+//									else
+//									{
+//										aResult.push(['', null]);
+//									}
+//								});
+//							}
+//							else
+//							{
+//								aResult.push([sInputValue, null]);
+//							}
+//						}
+//						else
+//						{
+//							aResult.push([sInputValue, null]);
+//						}
+//					});
+//
+//					return aResult;
 				},
 				'change': _.bind(function (oEvent) {
 					$oEl.data('EmailsTagsValue', oEvent.target.value);
 					fValue(oEvent.target.value);
 				}, this)
 			});
+
+			if (fValue && fValue.focused && fValue.focused.subscribe)
+			{
+				fValue.focused.subscribe(function (bValue) {
+					$oEl.inputosaurus(!!bValue ? 'focus' : 'blur');
+				});
+			}
 		},
-		'update': function (oElement, fValueAccessor, fAllBindingsAccessor) {
+		'update': function (oElement, fValueAccessor) {
 
 			var
 				$oEl = $(oElement),
-				fAllValueFunc = fAllBindingsAccessor(),
-				fEmailsTagsFilter = fAllValueFunc['emailsTagsFilter'] || null,
-				sValue = ko.unwrap(fValueAccessor())
+				fValue = fValueAccessor(),
+				sValue = ko.unwrap(fValue)
 			;
 
 			if ($oEl.data('EmailsTagsValue') !== sValue)
@@ -693,11 +923,6 @@
 				$oEl.val(sValue);
 				$oEl.data('EmailsTagsValue', sValue);
 				$oEl.inputosaurus('refresh');
-			}
-
-			if (fEmailsTagsFilter && ko.unwrap(fEmailsTagsFilter))
-			{
-				$oEl.inputosaurus('focus');
 			}
 		}
 	};
@@ -790,6 +1015,56 @@
 		return oResult;
 	};
 
+	ko.extenders.limitedList = function (oTarget, mList)
+	{
+		var
+			Utils = require('Common/Utils'),
+			oResult = ko.computed({
+				'read': oTarget,
+				'write': function (sNewValue) {
+
+					var
+						sCurrentValue = ko.unwrap(oTarget),
+						aList = ko.unwrap(mList)
+					;
+
+					if (Utils.isNonEmptyArray(aList))
+					{
+						if (-1 < Utils.inArray(sNewValue, aList))
+						{
+							oTarget(sNewValue);
+						}
+						else if (-1 < Utils.inArray(sCurrentValue, aList))
+						{
+							oTarget(sCurrentValue + ' ');
+							oTarget(sCurrentValue);
+						}
+						else
+						{
+							oTarget(aList[0] + ' ');
+							oTarget(aList[0]);
+						}
+					}
+					else
+					{
+						oTarget('');
+					}
+				}
+			}).extend({'notify': 'always'})
+		;
+
+		oResult(oTarget());
+
+		if (!oResult.valueHasMutated)
+		{
+			oResult.valueHasMutated = function () {
+				oTarget.valueHasMutated();
+			};
+		}
+
+		return oResult;
+	};
+
 	ko.extenders.reversible = function (oTarget)
 	{
 		var mValue = oTarget();
@@ -846,19 +1121,55 @@
 
 	ko.extenders.falseTimeout = function (oTarget, iOption)
 	{
-		var Utils = require('Common/Utils');
-
-		oTarget.iTimeout = 0;
+		oTarget.iFalseTimeoutTimeout = 0;
 		oTarget.subscribe(function (bValue) {
 			if (bValue)
 			{
-				window.clearTimeout(oTarget.iTimeout);
-				oTarget.iTimeout = window.setTimeout(function () {
+				window.clearTimeout(oTarget.iFalseTimeoutTimeout);
+				oTarget.iFalseTimeoutTimeout = window.setTimeout(function () {
 					oTarget(false);
-					oTarget.iTimeout = 0;
-				}, Utils.pInt(iOption));
+					oTarget.iFalseTimeoutTimeout = 0;
+				}, require('Common/Utils').pInt(iOption));
 			}
 		});
+
+		return oTarget;
+	};
+
+	ko.extenders.specialThrottle = function (oTarget, iOption)
+	{
+		oTarget.iSpecialThrottleTimeoutValue = require('Common/Utils').pInt(iOption);
+		if (0 < oTarget.iSpecialThrottleTimeoutValue)
+		{
+			oTarget.iSpecialThrottleTimeout = 0;
+			oTarget.valueForRead = ko.observable(!!oTarget()).extend({'throttle': 10});
+
+			return ko.computed({
+				'read': oTarget.valueForRead,
+				'write': function (bValue) {
+
+					if (bValue)
+					{
+						oTarget.valueForRead(bValue);
+					}
+					else
+					{
+						if (oTarget.valueForRead())
+						{
+							window.clearTimeout(oTarget.iSpecialThrottleTimeout);
+							oTarget.iSpecialThrottleTimeout = window.setTimeout(function () {
+								oTarget.valueForRead(false);
+								oTarget.iSpecialThrottleTimeout = 0;
+							}, oTarget.iSpecialThrottleTimeoutValue);
+						}
+						else
+						{
+							oTarget.valueForRead(bValue);
+						}
+					}
+				}
+			});
+		}
 
 		return oTarget;
 	};
@@ -898,6 +1209,25 @@
 		}, this);
 
 		this.valueHasMutated();
+		return this;
+	};
+
+	ko.observable.fn.deleteAccessHelper = function ()
+	{
+		this.extend({'falseTimeout': 3000}).extend({'toggleSubscribe': [null,
+			function (oPrev) {
+				if (oPrev && oPrev.deleteAccess)
+				{
+					oPrev.deleteAccess(false);
+				}
+			}, function (oNext) {
+				if (oNext && oNext.deleteAccess)
+				{
+					oNext.deleteAccess(true);
+				}
+			}
+		]});
+
 		return this;
 	};
 

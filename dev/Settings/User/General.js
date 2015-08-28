@@ -11,9 +11,16 @@
 		Consts = require('Common/Consts'),
 		Globals = require('Common/Globals'),
 		Utils = require('Common/Utils'),
+		Translator = require('Common/Translator'),
 
-		Data = require('Storage/User/Data'),
-		Remote = require('Storage/User/Remote')
+		AppStore = require('Stores/User/App'),
+		LanguageStore = require('Stores/Language'),
+		SettingsStore = require('Stores/User/Settings'),
+		IdentityStore = require('Stores/User/Identity'),
+		NotificationStore = require('Stores/User/Notification'),
+		MessageStore = require('Stores/User/Message'),
+
+		Remote = require('Remote/User/Ajax')
 	;
 
 	/**
@@ -21,32 +28,31 @@
 	 */
 	function GeneralUserSettings()
 	{
-		this.mainLanguage = Data.mainLanguage;
-		this.mainMessagesPerPage = Data.mainMessagesPerPage;
-		this.mainMessagesPerPageArray = Consts.Defaults.MessagesPerPageArray;
-		this.editorDefaultType = Data.editorDefaultType;
-		this.showImages = Data.showImages;
-		this.interfaceAnimation = Data.interfaceAnimation;
-		this.useDesktopNotifications = Data.useDesktopNotifications;
-		this.threading = Data.threading;
-		this.useThreads = Data.useThreads;
-		this.replySameFolder = Data.replySameFolder;
-		this.layout = Data.layout;
-		this.usePreviewPane = Data.usePreviewPane;
-		this.useCheckboxesInList = Data.useCheckboxesInList;
-		this.allowLanguagesOnSettings = Data.allowLanguagesOnSettings;
+		this.language = LanguageStore.language;
+		this.languages = LanguageStore.languages;
+		this.messagesPerPage = SettingsStore.messagesPerPage;
+		this.messagesPerPageArray = Consts.Defaults.MessagesPerPageArray;
 
-		this.isDesktopNotificationsSupported = ko.computed(function () {
-			return Enums.DesktopNotifications.NotSupported !== Data.desktopNotificationsPermisions();
-		});
+		this.editorDefaultType = SettingsStore.editorDefaultType;
+		this.layout = SettingsStore.layout;
+		this.usePreviewPane = SettingsStore.usePreviewPane;
 
-		this.isDesktopNotificationsDenied = ko.computed(function () {
-			return Enums.DesktopNotifications.NotSupported === Data.desktopNotificationsPermisions() ||
-				Enums.DesktopNotifications.Denied === Data.desktopNotificationsPermisions();
-		});
+		this.soundNotificationIsSupported = NotificationStore.soundNotificationIsSupported;
+		this.enableSoundNotification = NotificationStore.enableSoundNotification;
 
-		this.mainLanguageFullName = ko.computed(function () {
-			return Utils.convertLangName(this.mainLanguage());
+		this.enableDesktopNotification = NotificationStore.enableDesktopNotification;
+		this.isDesktopNotificationSupported = NotificationStore.isDesktopNotificationSupported;
+		this.isDesktopNotificationDenied = NotificationStore.isDesktopNotificationDenied;
+
+		this.showImages = SettingsStore.showImages;
+		this.useCheckboxesInList = SettingsStore.useCheckboxesInList;
+		this.threadsAllowed = AppStore.threadsAllowed;
+		this.useThreads = SettingsStore.useThreads;
+		this.replySameFolder = SettingsStore.replySameFolder;
+		this.allowLanguagesOnSettings = AppStore.allowLanguagesOnSettings;
+
+		this.languageFullName = ko.computed(function () {
+			return Utils.convertLangName(this.language());
 		}, this);
 
 		this.languageTrigger = ko.observable(Enums.SaveSettingsStep.Idle).extend({'throttle': 100});
@@ -57,25 +63,53 @@
 
 		this.isAnimationSupported = Globals.bAnimationSupported;
 
+		this.identities = IdentityStore.identities;
+
+		this.identityMain = ko.computed(function () {
+			var aList = this.identities();
+			return Utils.isArray(aList) ? _.find(aList, function (oItem) {
+				return oItem && '' === oItem.id() ? true : false;
+			}) : null;
+		}, this);
+
+		this.identityMainDesc = ko.computed(function () {
+			var oIdentity = this.identityMain();
+			return oIdentity ? oIdentity.formattedName() : '---';
+		}, this);
+
 		this.editorDefaultTypes = ko.computed(function () {
-			Globals.langChangeTrigger();
+			Translator.trigger();
 			return [
-				{'id': Enums.EditorDefaultType.Html, 'name': Utils.i18n('SETTINGS_GENERAL/LABEL_EDITOR_HTML')},
-				{'id': Enums.EditorDefaultType.Plain, 'name': Utils.i18n('SETTINGS_GENERAL/LABEL_EDITOR_PLAIN')},
-				{'id': Enums.EditorDefaultType.HtmlForced, 'name': Utils.i18n('SETTINGS_GENERAL/LABEL_EDITOR_HTML_FORCED')},
-				{'id': Enums.EditorDefaultType.PlainForced, 'name': Utils.i18n('SETTINGS_GENERAL/LABEL_EDITOR_PLAIN_FORCED')}
+				{'id': Enums.EditorDefaultType.Html, 'name': Translator.i18n('SETTINGS_GENERAL/LABEL_EDITOR_HTML')},
+				{'id': Enums.EditorDefaultType.Plain, 'name': Translator.i18n('SETTINGS_GENERAL/LABEL_EDITOR_PLAIN')},
+				{'id': Enums.EditorDefaultType.HtmlForced, 'name': Translator.i18n('SETTINGS_GENERAL/LABEL_EDITOR_HTML_FORCED')},
+				{'id': Enums.EditorDefaultType.PlainForced, 'name': Translator.i18n('SETTINGS_GENERAL/LABEL_EDITOR_PLAIN_FORCED')}
 			];
 		}, this);
 
 		this.layoutTypes = ko.computed(function () {
-			Globals.langChangeTrigger();
+			Translator.trigger();
 			return [
-				{'id': Enums.Layout.NoPreview, 'name': Utils.i18n('SETTINGS_GENERAL/LABEL_LAYOUT_NO_SPLIT')},
-				{'id': Enums.Layout.SidePreview, 'name': Utils.i18n('SETTINGS_GENERAL/LABEL_LAYOUT_VERTICAL_SPLIT')},
-				{'id': Enums.Layout.BottomPreview, 'name': Utils.i18n('SETTINGS_GENERAL/LABEL_LAYOUT_HORIZONTAL_SPLIT')}
+				{'id': Enums.Layout.NoPreview, 'name': Translator.i18n('SETTINGS_GENERAL/LABEL_LAYOUT_NO_SPLIT')},
+				{'id': Enums.Layout.SidePreview, 'name': Translator.i18n('SETTINGS_GENERAL/LABEL_LAYOUT_VERTICAL_SPLIT')},
+				{'id': Enums.Layout.BottomPreview, 'name': Translator.i18n('SETTINGS_GENERAL/LABEL_LAYOUT_HORIZONTAL_SPLIT')}
 			];
 		}, this);
 	}
+
+	GeneralUserSettings.prototype.editMainIdentity = function ()
+	{
+		var oIdentity = this.identityMain();
+		if (oIdentity)
+		{
+			require('Knoin/Knoin').showScreenPopup(require('View/Popup/Identity'), [oIdentity]);
+		}
+	};
+
+	GeneralUserSettings.prototype.testSoundNotification = function ()
+	{
+		NotificationStore.playSoundNotification(true);
+	};
 
 	GeneralUserSettings.prototype.onBuild = function ()
 	{
@@ -97,11 +131,11 @@
 				}
 			;
 
-			Data.language.subscribe(function (sValue) {
+			self.language.subscribe(function (sValue) {
 
 				self.languageTrigger(Enums.SaveSettingsStep.Animate);
 
-				Utils.reloadLanguage(sValue,
+				Translator.reload(false, sValue,
 					fReloadLanguageHelper(Enums.SaveSettingsStep.TrueResult),
 					fReloadLanguageHelper(Enums.SaveSettingsStep.FalseResult));
 
@@ -110,31 +144,25 @@
 				});
 			});
 
-			Data.editorDefaultType.subscribe(function (sValue) {
+			self.editorDefaultType.subscribe(function (sValue) {
 				Remote.saveSettings(f0, {
 					'EditorDefaultType': sValue
 				});
 			});
 
-			Data.messagesPerPage.subscribe(function (iValue) {
+			self.messagesPerPage.subscribe(function (iValue) {
 				Remote.saveSettings(f1, {
 					'MPP': iValue
 				});
 			});
 
-			Data.showImages.subscribe(function (bValue) {
+			self.showImages.subscribe(function (bValue) {
 				Remote.saveSettings(null, {
 					'ShowImages': bValue ? '1' : '0'
 				});
 			});
 
-			Data.interfaceAnimation.subscribe(function (sValue) {
-				Remote.saveSettings(null, {
-					'InterfaceAnimation': sValue
-				});
-			});
-
-			Data.useDesktopNotifications.subscribe(function (bValue) {
+			self.enableDesktopNotification.subscribe(function (bValue) {
 				Utils.timeOutAction('SaveDesktopNotifications', function () {
 					Remote.saveSettings(null, {
 						'DesktopNotifications': bValue ? '1' : '0'
@@ -142,7 +170,15 @@
 				}, 3000);
 			});
 
-			Data.replySameFolder.subscribe(function (bValue) {
+			self.enableSoundNotification.subscribe(function (bValue) {
+				Utils.timeOutAction('SaveSoundNotification', function () {
+					Remote.saveSettings(null, {
+						'SoundNotification': bValue ? '1' : '0'
+					});
+				}, 3000);
+			});
+
+			self.replySameFolder.subscribe(function (bValue) {
 				Utils.timeOutAction('SaveReplySameFolder', function () {
 					Remote.saveSettings(null, {
 						'ReplySameFolder': bValue ? '1' : '0'
@@ -150,25 +186,25 @@
 				}, 3000);
 			});
 
-			Data.useThreads.subscribe(function (bValue) {
+			self.useThreads.subscribe(function (bValue) {
 
-				Data.messageList([]);
+				MessageStore.messageList([]);
 
 				Remote.saveSettings(null, {
 					'UseThreads': bValue ? '1' : '0'
 				});
 			});
 
-			Data.layout.subscribe(function (nValue) {
+			self.layout.subscribe(function (nValue) {
 
-				Data.messageList([]);
+				MessageStore.messageList([]);
 
 				Remote.saveSettings(f2, {
 					'Layout': nValue
 				});
 			});
 
-			Data.useCheckboxesInList.subscribe(function (bValue) {
+			self.useCheckboxesInList.subscribe(function (bValue) {
 				Remote.saveSettings(null, {
 					'UseCheckboxesInList': bValue ? '1' : '0'
 				});
@@ -179,12 +215,14 @@
 
 	GeneralUserSettings.prototype.onShow = function ()
 	{
-		Data.desktopNotifications.valueHasMutated();
+		this.enableDesktopNotification.valueHasMutated();
 	};
 
 	GeneralUserSettings.prototype.selectLanguage = function ()
 	{
-		require('Knoin/Knoin').showScreenPopup(require('View/Popup/Languages'));
+		require('Knoin/Knoin').showScreenPopup(require('View/Popup/Languages'), [
+			this.language, this.languages(), LanguageStore.userLanguage()
+		]);
 	};
 
 	module.exports = GeneralUserSettings;

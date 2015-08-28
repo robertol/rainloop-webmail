@@ -5,13 +5,14 @@
 
 	var
 		window = require('window'),
+		_ = require('_'),
 		ko = require('ko'),
 
 		Enums = require('Common/Enums'),
-		Utils = require('Common/Utils'),
+		Translator = require('Common/Translator'),
 
-		Data = require('Storage/Admin/Data'),
-		Remote = require('Storage/Admin/Remote')
+		PackageStore = require('Stores/Admin/Package'),
+		Remote = require('Remote/Admin/Ajax')
 	;
 
 	/**
@@ -21,9 +22,9 @@
 	{
 		this.packagesError = ko.observable('');
 
-		this.packages = Data.packages;
-		this.packagesReal = Data.packagesReal;
-		this.packagesMainUpdatable = Data.packagesMainUpdatable;
+		this.packages = PackageStore.packages;
+		this.packagesReal = PackageStore.packagesReal;
+		this.packagesMainUpdatable = PackageStore.packagesMainUpdatable;
 
 		this.packagesCurrent = this.packages.filter(function (oItem) {
 			return oItem && '' !== oItem['installed'] && !oItem['compare'];
@@ -38,7 +39,7 @@
 		});
 
 		this.visibility = ko.computed(function () {
-			return Data.packages.loading() ? 'visible' : 'hidden';
+			return PackageStore.packages.loading() ? 'visible' : 'hidden';
 		}, this);
 	}
 
@@ -61,16 +62,16 @@
 			{
 				if (oData && oData.ErrorCode)
 				{
-					self.packagesError(Utils.getNotification(oData.ErrorCode));
+					self.packagesError(Translator.getNotification(oData.ErrorCode));
 				}
 				else
 				{
-					self.packagesError(Utils.getNotification(
+					self.packagesError(Translator.getNotification(
 						bInstall ? Enums.Notification.CantInstallPackage : Enums.Notification.CantDeletePackage));
 				}
 			}
 
-			_.each(Data.packages(), function (oItem) {
+			_.each(self.packages(), function (oItem) {
 				if (oItem && oPackage && oItem['loading']() && oPackage['file'] === oItem['file'])
 				{
 					oPackage['loading'](false);

@@ -6,8 +6,10 @@
 	var
 		ko = require('ko'),
 
-		Remote = require('Storage/User/Remote'),
-		Data = require('Storage/User/Data')
+		AppStore = require('Stores/User/App'),
+		ContactStore = require('Stores/User/Contact'),
+
+		Remote = require('Remote/User/Ajax')
 	;
 
 	/**
@@ -15,13 +17,13 @@
 	 */
 	function ContactsUserSettings()
 	{
-		this.contactsAutosave = Data.contactsAutosave;
+		this.contactsAutosave = AppStore.contactsAutosave;
 
-		this.allowContactsSync = Data.allowContactsSync;
-		this.enableContactsSync = Data.enableContactsSync;
-		this.contactsSyncUrl = Data.contactsSyncUrl;
-		this.contactsSyncUser = Data.contactsSyncUser;
-		this.contactsSyncPass = Data.contactsSyncPass;
+		this.allowContactsSync = ContactStore.allowContactsSync;
+		this.enableContactsSync = ContactStore.enableContactsSync;
+		this.contactsSyncUrl = ContactStore.contactsSyncUrl;
+		this.contactsSyncUser = ContactStore.contactsSyncUser;
+		this.contactsSyncPass = ContactStore.contactsSyncPass;
 
 		this.saveTrigger = ko.computed(function () {
 			return [
@@ -35,7 +37,7 @@
 
 	ContactsUserSettings.prototype.onBuild = function ()
 	{
-		Data.contactsAutosave.subscribe(function (bValue) {
+		this.contactsAutosave.subscribe(function (bValue) {
 			Remote.saveSettings(null, {
 				'ContactsAutosave': bValue ? '1' : '0'
 			});

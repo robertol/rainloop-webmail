@@ -30,55 +30,58 @@ class Identity
 	private $sBcc;
 
 	/**
-	 * @param string $sId
-	 * @param string $sEmail
-	 * @param string $sName
-	 * @param string $sReplyTo
-	 * @param string $sBcc
+	 * @var string
+	 */
+	private $sSignature;
+
+	/**
+	 * @var bool
+	 */
+	private $bSignatureInsertBefore;
+
+	/**
+	 * @param string $sId = ''
+	 * @param string $sEmail = ''
 	 *
 	 * @return void
 	 */
-	protected function __construct($sId, $sEmail, $sName, $sReplyTo, $sBcc)
+	protected function __construct($sId = '', $sEmail = '')
 	{
 		$this->sId = $sId;
-		$this->sEmail = \MailSo\Base\Utils::IdnToAscii($sEmail, true);
-		$this->sName = \trim($sName);
-		$this->sReplyTo = \trim($sReplyTo);
-		$this->sBcc = \trim($sBcc);
+		$this->sEmail = $sEmail;
+		$this->sName = '';
+		$this->sReplyTo = '';
+		$this->sBcc = '';
+		$this->sSignature = '';
+		$this->bSignatureInsertBefore = false;
 	}
 
 	/**
-	 * @param string $sId
-	 * @param string $sEmail
-	 * @param string $sName = ''
-	 * @param string $sReplyTo = ''
-	 * @param string $sBcc = ''
+	 * @return \RainLoop\Model\Identity
+	 */
+	public static function NewInstance()
+	{
+		return new self();
+	}
+
+	/**
+	 * @param \RainLoop\Model\Account $oAccount
 	 *
 	 * @return \RainLoop\Model\Identity
 	 */
-	public static function NewInstance($sId, $sEmail, $sName = '', $sReplyTo = '', $sBcc = '')
+	public static function NewInstanceFromAccount(\RainLoop\Model\Account $oAccount)
 	{
-		return new self($sId, $sEmail, $sName, $sReplyTo, $sBcc);
+		return new self('', $oAccount->Email());
 	}
 
 	/**
+	 * @param bool $bFillOnEmpty = false
+	 *
 	 * @return string
 	 */
-	public function Id()
+	public function Id($bFillOnEmpty = false)
 	{
-		return $this->sId;
-	}
-
-	/**
-	 * @param string $sId
-	 *
-	 * @return \RainLoop\Model\Identity
-	 */
-	public function SetId($sId)
-	{
-		$this->sId = $sId;
-
-		return $this;
+		return $bFillOnEmpty ? ('' === $this->sId ? '---' : $this->sId) : $this->sId;
 	}
 
 	/**
@@ -96,7 +99,7 @@ class Identity
 	 */
 	public function SetEmail($sEmail)
 	{
-		$this->sEmail = \MailSo\Base\Utils::IdnToAscii($sEmail, true);
+		$this->sEmail = $sEmail;
 
 		return $this;
 	}
@@ -110,35 +113,11 @@ class Identity
 	}
 
 	/**
-	 * @param string $sName
-	 *
-	 * @return \RainLoop\Model\Identity
-	 */
-	public function SetName($sName)
-	{
-		$this->sName = $sName;
-
-		return $this;
-	}
-
-	/**
 	 * @return string
 	 */
 	public function ReplyTo()
 	{
 		return $this->sReplyTo;
-	}
-
-	/**
-	 * @param string $sReplyTo
-	 *
-	 * @return \RainLoop\Model\Identity
-	 */
-	public function SetReplyTo($sReplyTo)
-	{
-		$this->sReplyTo = $sReplyTo;
-
-		return $this;
 	}
 
 	/**
@@ -150,15 +129,44 @@ class Identity
 	}
 
 	/**
-	 * @param string $sBcc
-	 *
-	 * @return \RainLoop\Model\Identity
+	 * @return string
 	 */
-	public function SetBcc($sBcc)
+	public function Signature()
 	{
-		$this->sBcc = $sBcc;
+		return $this->sSignature;
+	}
 
-		return $this;
+	/**
+	 * @return bool
+	 */
+	public function SignatureInsertBefore()
+	{
+		return $this->bSignatureInsertBefore;
+	}
+
+	/**
+	 * @param array $aData
+	 * @param bool $bAjax = false
+	 *
+	 * @return bool
+	 */
+	public function FromJSON($aData, $bAjax = false)
+	{
+		if (isset($aData['Id'], $aData['Email']) && !empty($aData['Email']))
+		{
+			$this->sId = $aData['Id'];
+			$this->sEmail = $bAjax ? \MailSo\Base\Utils::IdnToAscii($aData['Email'], true) : $aData['Email'];
+			$this->sName = isset($aData['Name']) ? $aData['Name'] : '';
+			$this->sReplyTo = !empty($aData['ReplyTo']) ? $aData['ReplyTo'] : '';
+			$this->sBcc = !empty($aData['Bcc']) ? $aData['Bcc'] : '';
+			$this->sSignature = !empty($aData['Signature']) ? $aData['Signature'] : '';
+			$this->bSignatureInsertBefore = isset($aData['SignatureInsertBefore']) ?
+				($bAjax ? '1' === $aData['SignatureInsertBefore'] : !!$aData['SignatureInsertBefore']) : true;
+
+			return true;
+		}
+
+		return false;
 	}
 
 	/**
@@ -173,7 +181,25 @@ class Identity
 			'Email' => $bAjax ? \MailSo\Base\Utils::IdnToUtf8($this->Email()) : $this->Email(),
 			'Name' => $this->Name(),
 			'ReplyTo' => $this->ReplyTo(),
-			'Bcc' => $this->Bcc()
+			'Bcc' => $this->Bcc(),
+			'Signature' => $this->Signature(),
+			'SignatureInsertBefore' => $this->SignatureInsertBefore()
 		);
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function Validate()
+	{
+		return !empty($this->sEmail);
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function IsAccountIdentities()
+	{
+		return '' === $this->Id();
 	}
 }

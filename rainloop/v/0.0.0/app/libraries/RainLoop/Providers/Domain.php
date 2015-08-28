@@ -130,8 +130,9 @@ class Domain extends \RainLoop\Providers\AbstractProvider
 			$iIncSecure = (int) $oActions->GetActionParam('IncSecure', \MailSo\Net\Enumerations\ConnectionSecurityType::NONE);
 			$bIncShortLogin = '1' === (string) $oActions->GetActionParam('IncShortLogin', '0');
 			$bUseSieve = '1' === (string) $oActions->GetActionParam('UseSieve', '0');
+			$bSieveAllowRaw = '1' === (string) $oActions->GetActionParam('SieveAllowRaw', '0');
 			$sSieveHost = (string) $oActions->GetActionParam('SieveHost', '');
-			$iSievePort = (int) $oActions->GetActionParam('SievePort', 2000);
+			$iSievePort = (int) $oActions->GetActionParam('SievePort', 4190);
 			$iSieveSecure = (int) $oActions->GetActionParam('SieveSecure', \MailSo\Net\Enumerations\ConnectionSecurityType::NONE);
 			$sOutHost = (string) $oActions->GetActionParam('OutHost', '');
 			$iOutPort = (int) $oActions->GetActionParam('OutPort', 25);
@@ -172,6 +173,11 @@ class Domain extends \RainLoop\Providers\AbstractProvider
 						$sOutHost, $iOutPort, $iOutSecure, $bOutShortLogin, $bOutAuth, $bOutUsePhpMail,
 						$sWhiteList);
 				}
+			}
+
+			if ($oDomain)
+			{
+				$oDomain->SetSieveAllowRaw($bSieveAllowRaw);
 			}
 		}
 

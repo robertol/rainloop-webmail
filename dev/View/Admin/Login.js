@@ -9,9 +9,10 @@
 
 		Enums = require('Common/Enums'),
 		Utils = require('Common/Utils'),
+		Translator = require('Common/Translator'),
 
 		Settings = require('Storage/Settings'),
-		Remote = require('Storage/Admin/Remote'),
+		Remote = require('Remote/Admin/Ajax'),
 
 		kn = require('Knoin/Knoin'),
 		AbstractView = require('Knoin/AbstractView')
@@ -33,7 +34,16 @@
 		this.loginError = ko.observable(false);
 		this.passwordError = ko.observable(false);
 
+		this.loginErrorAnimation = ko.observable(false).extend({'falseTimeout': 500});
+		this.passwordErrorAnimation = ko.observable(false).extend({'falseTimeout': 500});
+
 		this.loginFocus = ko.observable(false);
+
+		this.formHidden = ko.observable(false);
+
+		this.formError = ko.computed(function () {
+			return this.loginErrorAnimation() || this.passwordErrorAnimation();
+		}, this);
 
 		this.login.subscribe(function () {
 			this.loginError(false);
@@ -43,12 +53,23 @@
 			this.passwordError(false);
 		}, this);
 
+		this.loginError.subscribe(function (bV) {
+			this.loginErrorAnimation(!!bV);
+		}, this);
+
+		this.passwordError.subscribe(function (bV) {
+			this.passwordErrorAnimation(!!bV);
+		}, this);
+
 		this.submitRequest = ko.observable(false);
 		this.submitError = ko.observable('');
 
 		this.submitCommand = Utils.createCommand(this, function () {
 
 			Utils.triggerAutocompleteInputChange();
+
+			this.loginError(false);
+			this.passwordError(false);
 
 			this.loginError('' === Utils.trim(this.login()));
 			this.passwordError('' === Utils.trim(this.password()));
@@ -66,18 +87,18 @@
 				{
 					if (oData.Result)
 					{
-						require('App/Admin').loginAndLogoutReload();
+						require('App/Admin').loginAndLogoutReload(true);
 					}
 					else if (oData.ErrorCode)
 					{
 						this.submitRequest(false);
-						this.submitError(Utils.getNotification(oData.ErrorCode));
+						this.submitError(Translator.getNotification(oData.ErrorCode));
 					}
 				}
 				else
 				{
 					this.submitRequest(false);
-					this.submitError(Utils.getNotification(Enums.Notification.UnknownError));
+					this.submitError(Translator.getNotification(Enums.Notification.UnknownError));
 				}
 
 			}, this), this.login(), this.password());

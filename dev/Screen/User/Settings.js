@@ -7,9 +7,13 @@
 		_ = require('_'),
 
 		Enums = require('Common/Enums'),
-		Utils = require('Common/Utils'),
 		Globals = require('Common/Globals'),
+		Translator = require('Common/Translator'),
 
+		Plugins = require('Common/Plugins'),
+
+		AppStore = require('Stores/User/App'),
+		AccountStore = require('Stores/User/Account'),
 		Settings = require('Storage/Settings'),
 
 		kn = require('Knoin/Knoin'),
@@ -29,8 +33,8 @@
 			require('View/User/Settings/Pane')
 		]);
 
-		Utils.initOnStartOrLangChange(function () {
-			this.sSettingsTitle = Utils.i18n('TITLES/SETTINGS');
+		Translator.initOnStartOrLangChange(function () {
+			this.sSettingsTitle = Translator.i18n('TITLES/SETTINGS');
 		}, this, function () {
 			this.setSettingsTitle();
 		});
@@ -43,30 +47,30 @@
 	 */
 	SettingsUserScreen.prototype.setupSettings = function (fCallback)
 	{
+		if (!Settings.capa(Enums.Capa.Settings))
+		{
+			if (fCallback)
+			{
+				fCallback();
+			}
+
+			return false;
+		}
+
 		kn.addSettingsViewModel(require('Settings/User/General'),
 			'SettingsGeneral', 'SETTINGS_LABELS/LABEL_GENERAL_NAME', 'general', true);
 
-		if (Settings.settingsGet('ContactsIsAllowed'))
+		if (AppStore.contactsIsAllowed())
 		{
 			kn.addSettingsViewModel(require('Settings/User/Contacts'),
 				'SettingsContacts', 'SETTINGS_LABELS/LABEL_CONTACTS_NAME', 'contacts');
 		}
 
-		if (Settings.capa(Enums.Capa.AdditionalAccounts))
+		if (Settings.capa(Enums.Capa.AdditionalAccounts) || Settings.capa(Enums.Capa.Identities))
 		{
-			kn.addSettingsViewModel(require('Settings/User/Accounts'),
-				'SettingsAccounts', 'SETTINGS_LABELS/LABEL_ACCOUNTS_NAME', 'accounts');
-		}
-
-		if (Settings.capa(Enums.Capa.AdditionalIdentities))
-		{
-			kn.addSettingsViewModel(require('Settings/User/Identities'),
-				'SettingsIdentities', 'SETTINGS_LABELS/LABEL_IDENTITIES_NAME', 'identities');
-		}
-		else
-		{
-			kn.addSettingsViewModel(require('Settings/User/Identity'),
-				'SettingsIdentity', 'SETTINGS_LABELS/LABEL_IDENTITY_NAME', 'identity');
+			kn.addSettingsViewModel(require('Settings/User/Accounts'), 'SettingsAccounts',
+				Settings.capa(Enums.Capa.AdditionalAccounts) ?
+					'SETTINGS_LABELS/LABEL_ACCOUNTS_NAME' : 'SETTINGS_LABELS/LABEL_IDENTITIES_NAME', 'accounts');
 		}
 
 		if (Settings.capa(Enums.Capa.Sieve))
@@ -75,15 +79,16 @@
 				'SettingsFilters', 'SETTINGS_LABELS/LABEL_FILTERS_NAME', 'filters');
 		}
 
-		if (Settings.capa(Enums.Capa.TwoFactor))
+		if (Settings.capa(Enums.Capa.AutoLogout) || Settings.capa(Enums.Capa.TwoFactor))
 		{
 			kn.addSettingsViewModel(require('Settings/User/Security'),
 				'SettingsSecurity', 'SETTINGS_LABELS/LABEL_SECURITY_NAME', 'security');
 		}
 
-		if ((Settings.settingsGet('AllowGoogleSocial') && Settings.settingsGet('AllowGoogleSocialAuth')) ||
+		if (AccountStore.isRootAccount() && (
+			(Settings.settingsGet('AllowGoogleSocial') && Settings.settingsGet('AllowGoogleSocialAuth')) ||
 			Settings.settingsGet('AllowFacebookSocial') ||
-			Settings.settingsGet('AllowTwitterSocial'))
+			Settings.settingsGet('AllowTwitterSocial')))
 		{
 			kn.addSettingsViewModel(require('Settings/User/Social'),
 				'SettingsSocial', 'SETTINGS_LABELS/LABEL_SOCIAL_NAME', 'social');
@@ -95,8 +100,17 @@
 				'SettingsChangePassword', 'SETTINGS_LABELS/LABEL_CHANGE_PASSWORD_NAME', 'change-password');
 		}
 
-		kn.addSettingsViewModel(require('Settings/User/Folders'),
-			'SettingsFolders', 'SETTINGS_LABELS/LABEL_FOLDERS_NAME', 'folders');
+		if (Settings.capa(Enums.Capa.Templates))
+		{
+			kn.addSettingsViewModel(require('Settings/User/Templates'),
+				'SettingsTemplates', 'SETTINGS_LABELS/LABEL_TEMPLATES_NAME', 'templates');
+		}
+
+		if (Settings.capa(Enums.Capa.Folders))
+		{
+			kn.addSettingsViewModel(require('Settings/User/Folders'),
+				'SettingsFolders', 'SETTINGS_LABELS/LABEL_FOLDERS_NAME', 'folders');
+		}
 
 		if (Settings.capa(Enums.Capa.Themes))
 		{
@@ -110,21 +124,26 @@
 				'SettingsOpenPGP', 'SETTINGS_LABELS/LABEL_OPEN_PGP_NAME', 'openpgp');
 		}
 
+		Plugins.runSettingsViewModelHooks(false);
+
 		if (fCallback)
 		{
 			fCallback();
 		}
+
+		return true;
 	};
 
 	SettingsUserScreen.prototype.onShow = function ()
 	{
 		this.setSettingsTitle();
 		Globals.keyScope(Enums.KeyState.Settings);
+		Globals.leftPanelType('');
 	};
 
 	SettingsUserScreen.prototype.setSettingsTitle = function ()
 	{
-		require('App/User').setTitle(this.sSettingsTitle);
+		require('App/User').setWindowTitle(this.sSettingsTitle);
 	};
 
 	module.exports = SettingsUserScreen;

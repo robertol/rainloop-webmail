@@ -32,6 +32,7 @@ class Api
 			if ($bOne)
 			{
 				\RainLoop\Api::SetupDefaultMailSoConfig();
+
 				$bOne = \RainLoop\Api::RunResult();
 			}
 		}
@@ -91,13 +92,23 @@ class Api
 			\MailSo\Config::$MessageListDateFilter =
 				(int) \RainLoop\Api::Config()->Get('labs', 'imap_message_list_date_filter', 0);
 
+			\MailSo\Config::$MessageListPermanentFilter =
+				\trim(\RainLoop\Api::Config()->Get('labs', 'imap_message_list_permanent_filter', ''));
+
+			\MailSo\Config::$MessageAllHeaders =
+				!!\RainLoop\Api::Config()->Get('labs', 'imap_message_all_headers', false);
+
 			\MailSo\Config::$LargeThreadLimit =
-				(int) \RainLoop\Api::Config()->Get('labs', 'imap_large_thread_limit', 100);
+				(int) \RainLoop\Api::Config()->Get('labs', 'imap_large_thread_limit', 50);
+
+			\MailSo\Config::$BoundaryPrefix = '_RainLoop_';
 
 			\MailSo\Config::$SystemLogger = \RainLoop\Api::Logger();
 
 			$sSslCafile = \RainLoop\Api::Config()->Get('ssl', 'cafile', '');
 			$sSslCapath = \RainLoop\Api::Config()->Get('ssl', 'capath', '');
+
+			\RainLoop\Utils::$CookieDefaultPath = \RainLoop\Api::Config()->Get('labs', 'cookie_default_path', '');
 
 			if (!empty($sSslCafile) || !empty($sSslCapath))
 			{
@@ -130,19 +141,22 @@ class Api
 	/**
 	 * @param string $sEmail
 	 * @param string $sPassword
+	 * @param array $aAdditionalOptions = array()
 	 * @param bool $bUseTimeout = true
 	 *
 	 * @return string
 	 */
-	public static function GetUserSsoHash($sEmail, $sPassword, $bUseTimeout = true)
+	public static function GetUserSsoHash($sEmail, $sPassword, $aAdditionalOptions = array(), $bUseTimeout = true)
 	{
-		$sSsoHash = \sha1(\rand(10000, 99999).$sEmail.$sPassword.\microtime(true));
+		$sSsoHash = \MailSo\Base\Utils::Sha1Rand($sEmail.$sPassword);
 
-		return \RainLoop\Api::Actions()->Cacher()->Set(\RainLoop\KeyPathHelper::SsoCacherKey($sSsoHash), \RainLoop\Utils::EncodeKeyValues(array(
-			'Email' => $sEmail,
-			'Password' => $sPassword,
-			'Time' => $bUseTimeout ? \time() : 0
-		))) ? $sSsoHash : '';
+		return \RainLoop\Api::Actions()->Cacher()->Set(\RainLoop\KeyPathHelper::SsoCacherKey($sSsoHash),
+			\RainLoop\Utils::EncodeKeyValuesQ(array(
+				'Email' => $sEmail,
+				'Password' => $sPassword,
+				'AdditionalOptions' => $aAdditionalOptions,
+				'Time' => $bUseTimeout ? \time() : 0
+			))) ? $sSsoHash : '';
 	}
 
 	/**
@@ -169,26 +183,8 @@ class Api
 			$oStorageProvider = \RainLoop\Api::Actions()->StorageProvider();
 			if ($oStorageProvider && $oStorageProvider->IsActive())
 			{
-				// TwoFactor Auth User Data
-				$oStorageProvider->Clear(null,
-					\RainLoop\Providers\Storage\Enumerations\StorageType::NOBODY,
-					\RainLoop\KeyPathHelper::TwoFactorAuthUserData($sEmail)
-				);
-
-				// Accounts list
-				$oStorageProvider->Clear(null,
-					\RainLoop\Providers\Storage\Enumerations\StorageType::NOBODY,
-					\RainLoop\KeyPathHelper::WebmailAccounts($sEmail)
-				);
-
-				// Contact sync data
-				$oStorageProvider->Clear($sEmail,
-					\RainLoop\Providers\Storage\Enumerations\StorageType::CONFIG,
-					'contacts_sync'
-				);
+				$oStorageProvider->DeleteStorage($sEmail);
 			}
-
-			\RainLoop\Api::Actions()->SettingsProvider()->ClearByEmail($sEmail);
 
 			if (\RainLoop\Api::Actions()->AddressBookProvider() &&
 				\RainLoop\Api::Actions()->AddressBookProvider()->IsActive())

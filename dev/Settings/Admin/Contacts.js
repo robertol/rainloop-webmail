@@ -10,6 +10,8 @@
 		Enums = require('Common/Enums'),
 		Utils = require('Common/Utils'),
 
+		Translator = require('Common/Translator'),
+
 		Settings = require('Storage/Settings')
 	;
 
@@ -19,7 +21,7 @@
 	function ContactsAdminSettings()
 	{
 		var
-			Remote = require('Storage/Admin/Remote')
+			Remote = require('Remote/Admin/Ajax')
 		;
 
 		this.defautOptionsAfterRender = Utils.defautOptionsAfterRender;
@@ -68,7 +70,7 @@
 			var bDisabled = -1 === Utils.inArray(sValue, aSupportedTypes);
 			return {
 				'id': sValue,
-				'name': getTypeName(sValue) + (bDisabled ? ' (not supported)' : ''),
+				'name': getTypeName(sValue) + (bDisabled ? ' (' + Translator.i18n('HINTS/NOT_SUPPORTED') + ')' : ''),
 				'disabled': bDisabled
 			};
 		});
@@ -96,7 +98,7 @@
 					this.contactsType.valueHasMutated();
 				}
 			}
-		});
+		}).extend({'notify': 'always'});
 
 		this.contactsType.subscribe(function () {
 			this.testContactsSuccess(false);
@@ -178,7 +180,7 @@
 	{
 		var
 			self = this,
-			Remote = require('Storage/Admin/Remote')
+			Remote = require('Remote/Admin/Ajax')
 		;
 
 		_.delay(function () {

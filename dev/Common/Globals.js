@@ -1,4 +1,6 @@
 
+/* global RL_COMMUNITY */
+
 (function () {
 
 	'use strict';
@@ -18,32 +20,25 @@
 	Globals.$win = $(window);
 	Globals.$doc = $(window.document);
 	Globals.$html = $('html');
+	Globals.$body = $('body');
 	Globals.$div = $('<div></div>');
 
-	/**
-	 * @type {?}
-	 */
-	Globals.now = (new window.Date()).getTime();
+	Globals.$win.__sizes = [0, 0];
 
 	/**
 	 * @type {?}
 	 */
-	Globals.momentTrigger = ko.observable(true);
+	Globals.startMicrotime = (new window.Date()).getTime();
+
+	/**
+	 * @type {boolean}
+	 */
+	Globals.community = RL_COMMUNITY;
 
 	/**
 	 * @type {?}
 	 */
 	Globals.dropdownVisibility = ko.observable(false).extend({'rateLimit': 0});
-
-	/**
-	 * @type {?}
-	 */
-	Globals.tooltipTrigger = ko.observable(false).extend({'rateLimit': 0});
-
-	/**
-	 * @type {?}
-	 */
-	Globals.langChangeTrigger = ko.observable(true);
 
 	/**
 	 * @type {boolean}
@@ -73,22 +68,34 @@
 	/**
 	 * @type {string}
 	 */
-	Globals.sUserAgent = (window.navigator.userAgent || '').toLowerCase();
+	Globals.sUserAgent = 'navigator' in window && 'userAgent' in window.navigator &&
+		window.navigator.userAgent.toLowerCase() || '';
 
 	/**
 	 * @type {boolean}
 	 */
-	Globals.bIsiOSDevice = -1 < Globals.sUserAgent.indexOf('iphone') || -1 < Globals.sUserAgent.indexOf('ipod') || -1 < Globals.sUserAgent.indexOf('ipad');
+	Globals.bIE = Globals.sUserAgent.indexOf('msie') > -1;
 
 	/**
 	 * @type {boolean}
 	 */
-	Globals.bIsAndroidDevice = -1 < Globals.sUserAgent.indexOf('android');
+	Globals.bChrome = Globals.sUserAgent.indexOf('chrome') > -1;
 
 	/**
 	 * @type {boolean}
 	 */
-	Globals.bMobileDevice = Globals.bIsiOSDevice || Globals.bIsAndroidDevice;
+	Globals.bSafari = !Globals.bChrome && Globals.sUserAgent.indexOf('safari') > -1;
+
+	/**
+	 * @type {boolean}
+	 */
+	Globals.bMobileDevice =
+		/android/i.test(Globals.sUserAgent) ||
+		/iphone/i.test(Globals.sUserAgent) ||
+		/ipod/i.test(Globals.sUserAgent) ||
+		/ipad/i.test(Globals.sUserAgent) ||
+		/blackberry/i.test(Globals.sUserAgent)
+	;
 
 	/**
 	 * @type {boolean}
@@ -110,11 +117,6 @@
 	 * @type {boolean}
 	 */
 	Globals.bXMLHttpRequestSupported = !!window.XMLHttpRequest;
-
-	/**
-	 * @type {string}
-	 */
-	Globals.sAnimationType = '';
 
 	/**
 	 * @type {*}
@@ -141,12 +143,17 @@
 			{name: 'others'}
 		],
 
-		'removePlugins': 'liststyle,tabletools,contextmenu', //blockquote
+		'removePlugins': 'liststyle',
 		'removeButtons': 'Format,Undo,Redo,Cut,Copy,Paste,Anchor,Strike,Subscript,Superscript,Image,SelectAll,Source',
 		'removeDialogTabs': 'link:advanced;link:target;image:advanced;images:advanced',
 
-		'extraPlugins': 'plain,bidi', // signature
+		'extraPlugins': 'plain,signature',
+
 		'allowedContent': true,
+		'extraAllowedContent': true,
+
+		'fillEmptyBlocks': false,
+		'ignoreEmptyParagraph': true,
 
 		'font_defaultLabel': 'Arial',
 		'fontSize_defaultLabel': '13',
@@ -194,10 +201,6 @@
 		});
 	}
 
-	Globals.oI18N = window['rainloopI18N'] || {};
-
-	Globals.oNotificationI18N = {};
-
 	Globals.aBootstrapDropdowns = [];
 
 	Globals.aViewModels = {
@@ -207,6 +210,7 @@
 	};
 
 	Globals.leftPanelDisabled = ko.observable(false);
+	Globals.leftPanelType = ko.observable('');
 
 	// popups
 	Globals.popupVisibilityNames = ko.observableArray([]);
@@ -214,6 +218,10 @@
 	Globals.popupVisibility = ko.computed(function () {
 		return 0 < Globals.popupVisibilityNames().length;
 	}, this);
+
+	Globals.popupVisibility.subscribe(function (bValue) {
+		Globals.$html.toggleClass('rl-modal', bValue);
+	});
 
 	// keys
 	Globals.keyScopeReal = ko.observable(Enums.KeyState.All);
@@ -249,7 +257,7 @@
 
 							sTagName = sTagName.toUpperCase();
 							return !(sTagName === 'INPUT' || sTagName === 'SELECT' || sTagName === 'TEXTAREA' ||
-								(oElement && sTagName === 'DIV' && 'editorHtmlArea' === oElement.className && oElement.contentEditable)
+								(oElement && sTagName === 'DIV' && ('editorHtmlArea' === oElement.className || 'true' === '' + oElement.contentEditable))
 							);
 						}
 
@@ -269,14 +277,13 @@
 	});
 
 	Globals.keyScopeReal.subscribe(function (sValue) {
-//		window.console.log(sValue);
+//		window.console.log('keyScope=' + sValue); // DEBUG
 		key.setScope(sValue);
 	});
 
 	Globals.dropdownVisibility.subscribe(function (bValue) {
 		if (bValue)
 		{
-			Globals.tooltipTrigger(!Globals.tooltipTrigger());
 			Globals.keyScope(Enums.KeyState.Menu);
 		}
 		else if (Enums.KeyState.Menu === key.getScope())

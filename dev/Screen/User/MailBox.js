@@ -10,9 +10,17 @@
 		Globals = require('Common/Globals'),
 		Utils = require('Common/Utils'),
 		Events = require('Common/Events'),
+		Translator = require('Common/Translator'),
 
-		Data = require('Storage/User/Data'),
-		Cache = require('Storage/User/Cache'),
+		Cache = require('Common/Cache'),
+
+		AppStore = require('Stores/User/App'),
+		AccountStore = require('Stores/User/Account'),
+		SettingsStore = require('Stores/User/Settings'),
+		FolderStore = require('Stores/User/Folder'),
+		MessageStore = require('Stores/User/Message'),
+
+		Settings = require('Storage/Settings'),
 
 		AbstractScreen = require('Knoin/AbstractScreen')
 	;
@@ -40,94 +48,98 @@
 	 */
 	MailBoxUserScreen.prototype.oLastRoute = {};
 
-	MailBoxUserScreen.prototype.setNewTitle  = function ()
+	MailBoxUserScreen.prototype.updateWindowTitle  = function ()
 	{
 		var
-			sEmail = Data.accountEmail(),
-			nFoldersInboxUnreadCount = Data.foldersInboxUnreadCount()
+			sEmail = AccountStore.email(),
+			nFoldersInboxUnreadCount = FolderStore.foldersInboxUnreadCount()
 		;
 
-		require('App/User').setTitle(('' === sEmail ? '' :
-			(0 < nFoldersInboxUnreadCount ? '(' + nFoldersInboxUnreadCount + ') ' : ' ') + sEmail + ' - ') + Utils.i18n('TITLES/MAILBOX'));
+		if (Settings.settingsGet('Filtered'))
+		{
+			nFoldersInboxUnreadCount = 0;
+		}
+
+		require('App/User').setWindowTitle(('' === sEmail ? '' : '' +
+			(0 < nFoldersInboxUnreadCount ? '(' + nFoldersInboxUnreadCount + ') ' : ' ') +
+				sEmail + ' - ') + Translator.i18n('TITLES/MAILBOX'));
 	};
 
 	MailBoxUserScreen.prototype.onShow = function ()
 	{
-		this.setNewTitle();
-		Globals.keyScope(Enums.KeyState.MessageList);
+		this.updateWindowTitle();
+
+		AppStore.focusedState(Enums.Focused.None);
+		AppStore.focusedState(Enums.Focused.MessageList);
+
+		if (!Settings.capa(Enums.Capa.Folders))
+		{
+			Globals.leftPanelType(
+				Settings.capa(Enums.Capa.Composer) || Settings.capa(Enums.Capa.Contacts) ? 'short' : 'none');
+		}
+		else
+		{
+			Globals.leftPanelType('');
+		}
 	};
 
 	/**
 	 * @param {string} sFolderHash
 	 * @param {number} iPage
 	 * @param {string} sSearch
-	 * @param {boolean=} bPreview = false
 	 */
-	MailBoxUserScreen.prototype.onRoute = function (sFolderHash, iPage, sSearch, bPreview)
+	MailBoxUserScreen.prototype.onRoute = function (sFolderHash, iPage, sSearch)
 	{
-		if (Utils.isUnd(bPreview) ? false : !!bPreview)
+		var
+			sThreadUid = sFolderHash.replace(/^(.+)~([\d]+)$/, '$2'),
+			oFolder = Cache.getFolderFromCacheList(Cache.getFolderFullNameRaw(
+				sFolderHash.replace(/~([\d]+)$/, '')))
+		;
+
+		if (oFolder)
 		{
-			if (Enums.Layout.NoPreview === Data.layout() && !Data.message())
+			if (sFolderHash === sThreadUid)
 			{
-				require('App/User').historyBack();
+				sThreadUid = '';
 			}
-		}
-		else
-		{
-			var
-				sFolderFullNameRaw = Cache.getFolderFullNameRaw(sFolderHash),
-				oFolder = Cache.getFolderFromCacheList(sFolderFullNameRaw)
-			;
 
-			if (oFolder)
-			{
-				Data
-					.currentFolder(oFolder)
-					.messageListPage(iPage)
-					.messageListSearch(sSearch)
-				;
+			FolderStore.currentFolder(oFolder);
 
-				if (Enums.Layout.NoPreview === Data.layout() && Data.message())
-				{
-					Data.message(null);
-				}
+			MessageStore.messageListPage(iPage);
+			MessageStore.messageListSearch(sSearch);
+			MessageStore.messageListThreadUid(sThreadUid);
 
-				require('App/User').reloadMessageList();
-			}
+			require('App/User').reloadMessageList();
 		}
 	};
 
 	MailBoxUserScreen.prototype.onStart = function ()
 	{
-		var
-			fResizeFunction = function () {
-				Utils.windowResize();
-			}
-		;
+		FolderStore.folderList.subscribe(Utils.windowResizeCallback);
 
-		Data.folderList.subscribe(fResizeFunction);
-		Data.messageList.subscribe(fResizeFunction);
-		Data.message.subscribe(fResizeFunction);
+		MessageStore.messageList.subscribe(Utils.windowResizeCallback);
+		MessageStore.message.subscribe(Utils.windowResizeCallback);
 
-		Data.layout.subscribe(function (nValue) {
+		_.delay(function () {
+			SettingsStore.layout.valueHasMutated();
+		}, 50);
 
-			Globals.$html.toggleClass('rl-no-preview-pane', Enums.Layout.NoPreview === nValue);
-			Globals.$html.toggleClass('rl-side-preview-pane', Enums.Layout.SidePreview === nValue);
-			Globals.$html.toggleClass('rl-bottom-preview-pane', Enums.Layout.BottomPreview === nValue);
+		Events.sub('mailbox.inbox-unread-count', _.bind(function (iCount) {
 
-			Events.pub('layout', [nValue]);
-		});
+			FolderStore.foldersInboxUnreadCount(iCount);
 
-		Data.layout.valueHasMutated();
+			var sEmail = AccountStore.email();
 
-		Events.sub('mailbox.inbox-unread-count', function (nCount) {
-			Data.foldersInboxUnreadCount(nCount);
-		});
+			_.each(AccountStore.accounts(), function (oItem) {
+				if (oItem && sEmail === oItem.email)
+				{
+					oItem.count(iCount);
+				}
+			});
 
-		Data.foldersInboxUnreadCount.subscribe(function () {
-			this.setNewTitle();
-		}, this);
+			this.updateWindowTitle();
 
+		}, this));
 	};
 
 	MailBoxUserScreen.prototype.onBuild = function ()
@@ -147,9 +159,6 @@
 	{
 		var
 			sInboxFolderName = Cache.getFolderInboxName(),
-			fNormP = function () {
-				return [sInboxFolderName, 1, '', true];
-			},
 			fNormS = function (oRequest, oVals) {
 				oVals[0] = Utils.pString(oVals[0]);
 				oVals[1] = Utils.pInt(oVals[1]);
@@ -162,7 +171,7 @@
 					oVals[1] = 1;
 				}
 
-				return [decodeURI(oVals[0]), oVals[1], decodeURI(oVals[2]), false];
+				return [decodeURI(oVals[0]), oVals[1], decodeURI(oVals[2])];
 			},
 			fNormD = function (oRequest, oVals) {
 				oVals[0] = Utils.pString(oVals[0]);
@@ -173,15 +182,14 @@
 					oVals[0] = sInboxFolderName;
 				}
 
-				return [decodeURI(oVals[0]), 1, decodeURI(oVals[1]), false];
+				return [decodeURI(oVals[0]), 1, decodeURI(oVals[1])];
 			}
 		;
 
 		return [
-			[/^([a-zA-Z0-9]+)\/p([1-9][0-9]*)\/(.+)\/?$/, {'normalize_': fNormS}],
-			[/^([a-zA-Z0-9]+)\/p([1-9][0-9]*)$/, {'normalize_': fNormS}],
-			[/^([a-zA-Z0-9]+)\/(.+)\/?$/, {'normalize_': fNormD}],
-			[/^message-preview$/,  {'normalize_': fNormP}],
+			[/^([a-zA-Z0-9~]+)\/p([1-9][0-9]*)\/(.+)\/?$/, {'normalize_': fNormS}],
+			[/^([a-zA-Z0-9~]+)\/p([1-9][0-9]*)$/, {'normalize_': fNormS}],
+			[/^([a-zA-Z0-9~]+)\/(.+)\/?$/, {'normalize_': fNormD}],
 			[/^([^\/]*)$/,  {'normalize_': fNormS}]
 		];
 	};

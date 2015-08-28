@@ -9,10 +9,14 @@
 
 		Enums = require('Common/Enums'),
 		Consts = require('Common/Consts'),
+		Globals = require('Common/Globals'),
 		Utils = require('Common/Utils'),
 
-		Remote = require('Storage/Admin/Remote'),
-		Settings = require('Storage/Settings'),
+		Translator = require('Common/Translator'),
+
+		CapaAdminStore = require('Stores/Admin/Capa'),
+
+		Remote = require('Remote/Admin/Ajax'),
 
 		kn = require('Knoin/Knoin'),
 		AbstractView = require('Knoin/AbstractView')
@@ -35,14 +39,23 @@
 		this.testing = ko.observable(false);
 		this.testingDone = ko.observable(false);
 		this.testingImapError = ko.observable(false);
+		this.testingSieveError = ko.observable(false);
 		this.testingSmtpError = ko.observable(false);
 		this.testingImapErrorDesc = ko.observable('');
+		this.testingSieveErrorDesc = ko.observable('');
 		this.testingSmtpErrorDesc = ko.observable('');
 
 		this.testingImapError.subscribe(function (bValue) {
 			if (!bValue)
 			{
 				this.testingImapErrorDesc('');
+			}
+		}, this);
+
+		this.testingSieveError.subscribe(function (bValue) {
+			if (!bValue)
+			{
+				this.testingSieveErrorDesc('');
 			}
 		}, this);
 
@@ -53,9 +66,6 @@
 			}
 		}, this);
 
-		this.testingImapErrorDesc = ko.observable('');
-		this.testingSmtpErrorDesc = ko.observable('');
-
 		this.imapServerFocus = ko.observable(false);
 		this.sieveServerFocus = ko.observable(false);
 		this.smtpServerFocus = ko.observable(false);
@@ -63,13 +73,12 @@
 		this.name = ko.observable('');
 		this.name.focused = ko.observable(false);
 
-		this.allowSieve = ko.observable(Settings.capa(Enums.Capa.Sieve));
-
 		this.imapServer = ko.observable('');
 		this.imapPort = ko.observable('' + Consts.Values.ImapDefaulPort);
 		this.imapSecure = ko.observable(Enums.ServerSecure.None);
 		this.imapShortLogin = ko.observable(false);
 		this.useSieve = ko.observable(false);
+		this.sieveAllowRaw = ko.observable(false);
 		this.sieveServer = ko.observable('');
 		this.sievePort = ko.observable('' + Consts.Values.SieveDefaulPort);
 		this.sieveSecure = ko.observable(Enums.ServerSecure.None);
@@ -83,10 +92,15 @@
 
 		this.enableSmartPorts = ko.observable(false);
 
+		this.allowSieve = ko.computed(function () {
+			return CapaAdminStore.filters() && CapaAdminStore.sieve();
+		}, this);
+
 		this.headerText = ko.computed(function () {
 			var sName = this.name();
-			return this.edit() ? 'Edit Domain "' + sName + '"' :
-				'Add Domain' + ('' === sName ? '' : ' "' + sName + '"');
+			return this.edit() ? Translator.i18n('POPUPS_DOMAIN/TITLE_EDIT_DOMAIN', {'NAME': sName}) :
+				('' === sName ? Translator.i18n('POPUPS_DOMAIN/TITLE_ADD_DOMAIN') :
+					Translator.i18n('POPUPS_DOMAIN/TITLE_ADD_DOMAIN_WITH_NAME', {'NAME': sName}));
 		}, this);
 
 		this.domainIsComputed = ko.computed(function () {
@@ -126,6 +140,7 @@
 				this.imapShortLogin(),
 
 				this.useSieve(),
+				this.sieveAllowRaw(),
 				this.sieveServer(),
 				Utils.pInt(this.sievePort()),
 				this.sieveSecure(),
@@ -144,10 +159,10 @@
 		this.testConnectionCommand = Utils.createCommand(this, function () {
 
 			this.page('main');
-			this.sieveSettings(false);
 
 			this.testingDone(false);
 			this.testingImapError(false);
+			this.testingSieveError(false);
 			this.testingSmtpError(false);
 			this.testing(true);
 
@@ -274,24 +289,57 @@
 		this.testing(false);
 		if (Enums.StorageResultType.Success === sResult && oData.Result)
 		{
+			var
+				bImap = false,
+				bSieve = false
+			;
+
 			this.testingDone(true);
 			this.testingImapError(true !== oData.Result.Imap);
+			this.testingSieveError(true !== oData.Result.Sieve);
 			this.testingSmtpError(true !== oData.Result.Smtp);
 
 			if (this.testingImapError() && oData.Result.Imap)
 			{
+				bImap = true;
+				this.testingImapErrorDesc('');
 				this.testingImapErrorDesc(oData.Result.Imap);
+			}
+
+			if (this.testingSieveError() && oData.Result.Sieve)
+			{
+				bSieve = true;
+				this.testingSieveErrorDesc('');
+				this.testingSieveErrorDesc(oData.Result.Sieve);
 			}
 
 			if (this.testingSmtpError() && oData.Result.Smtp)
 			{
+				this.testingSmtpErrorDesc('');
 				this.testingSmtpErrorDesc(oData.Result.Smtp);
+			}
+
+			if (this.sieveSettings())
+			{
+				if (!bSieve && bImap)
+				{
+					this.sieveSettings(false);
+				}
+			}
+			else
+			{
+				if (bSieve && !bImap)
+				{
+					this.sieveSettings(true);
+				}
 			}
 		}
 		else
 		{
 			this.testingImapError(true);
+			this.testingSieveError(true);
 			this.testingSmtpError(true);
+			this.sieveSettings(false);
 		}
 	};
 
@@ -307,12 +355,12 @@
 			}
 			else if (Enums.Notification.DomainAlreadyExists === oData.ErrorCode)
 			{
-				this.savingError('Domain already exists');
+				this.savingError(Translator.i18n('ERRORS/DOMAIN_ALREADY_EXISTS'));
 			}
 		}
 		else
 		{
-			this.savingError('Unknown error');
+			this.savingError(Translator.i18n('ERRORS/UNKNOWN_ERROR'));
 		}
 	};
 
@@ -321,6 +369,7 @@
 		this.testing(false);
 		this.testingDone(false);
 		this.testingImapError(false);
+		this.testingSieveError(false);
 		this.testingSmtpError(false);
 	};
 
@@ -353,6 +402,7 @@
 			this.imapSecure(Utils.trim(oDomain.IncSecure));
 			this.imapShortLogin(!!oDomain.IncShortLogin);
 			this.useSieve(!!oDomain.UseSieve);
+			this.sieveAllowRaw(!!oDomain.SieveAllowRaw);
 			this.sieveServer(Utils.trim(oDomain.SieveHost));
 			this.sievePort('' + Utils.pInt(oDomain.SievePort));
 			this.sieveSecure(Utils.trim(oDomain.SieveSecure));
@@ -368,9 +418,9 @@
 		}
 	};
 
-	DomainPopupView.prototype.onFocus = function ()
+	DomainPopupView.prototype.onShowWithDelay = function ()
 	{
-		if ('' === this.name())
+		if ('' === this.name() && !Globals.bMobile)
 		{
 			this.name.focused(true);
 		}
@@ -396,6 +446,7 @@
 		this.imapShortLogin(false);
 
 		this.useSieve(false);
+		this.sieveAllowRaw(false);
 		this.sieveServer('');
 		this.sievePort('' + Consts.Values.SieveDefaulPort);
 		this.sieveSecure(Enums.ServerSecure.None);

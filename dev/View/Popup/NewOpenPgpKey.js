@@ -9,7 +9,7 @@
 
 		Utils = require('Common/Utils'),
 
-		Data = require('Storage/User/Data'),
+		PgpStore = require('Stores/User/Pgp'),
 
 		kn = require('Knoin/Knoin'),
 		AbstractView = require('Knoin/AbstractView')
@@ -42,8 +42,7 @@
 			var
 				self = this,
 				sUserID = '',
-				mKeyPair = null,
-				oOpenpgpKeyring = Data.openpgpKeyring
+				oOpenpgpKeyring = PgpStore.openpgpKeyring
 			;
 
 			this.email.error('' === Utils.trim(this.email()));
@@ -61,24 +60,41 @@
 			this.submitRequest(true);
 
 			_.delay(function () {
-	//			mKeyPair = Data.openpgp.generateKeyPair(1, Utils.pInt(self.keyBitLength()), sUserID, Utils.trim(self.password()));
-				mKeyPair = Data.openpgp.generateKeyPair({
-					'userId': sUserID,
-					'numBits': Utils.pInt(self.keyBitLength()),
-					'passphrase': Utils.trim(self.password())
-				});
 
-				if (mKeyPair && mKeyPair.privateKeyArmored)
+				var mPromise = false;
+
+				try {
+
+					mPromise = PgpStore.openpgp.generateKeyPair({
+						'userId': sUserID,
+						'numBits': Utils.pInt(self.keyBitLength()),
+						'passphrase': Utils.trim(self.password())
+					});
+
+					mPromise.then(function (mKeyPair) {
+
+						self.submitRequest(false);
+
+						if (mKeyPair && mKeyPair.privateKeyArmored)
+						{
+							oOpenpgpKeyring.privateKeys.importKey(mKeyPair.privateKeyArmored);
+							oOpenpgpKeyring.publicKeys.importKey(mKeyPair.publicKeyArmored);
+
+							oOpenpgpKeyring.store();
+
+							require('App/User').reloadOpenPgpKeys();
+							Utils.delegateRun(self, 'cancelCommand');
+						}
+
+					})['catch'](function() {
+						self.submitRequest(false);
+					});
+				}
+				catch (e)
 				{
-					oOpenpgpKeyring.privateKeys.importKey(mKeyPair.privateKeyArmored);
-					oOpenpgpKeyring.publicKeys.importKey(mKeyPair.publicKeyArmored);
-					oOpenpgpKeyring.store();
-
-					require('App/User').reloadOpenPgpKeys();
-					Utils.delegateRun(self, 'cancelCommand');
+					self.submitRequest(false);
 				}
 
-				self.submitRequest(false);
 			}, 100);
 
 			return true;
@@ -105,7 +121,7 @@
 		this.clearPopup();
 	};
 
-	NewOpenPgpKeyPopupView.prototype.onFocus = function ()
+	NewOpenPgpKeyPopupView.prototype.onShowWithDelay = function ()
 	{
 		this.email.focus(true);
 	};

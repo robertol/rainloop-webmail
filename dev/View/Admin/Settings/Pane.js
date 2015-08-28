@@ -8,8 +8,7 @@
 		ko = require('ko'),
 
 		Settings = require('Storage/Settings'),
-		Data = require('Storage/Admin/Data'),
-		Remote = require('Storage/Admin/Remote'),
+		Remote = require('Remote/Admin/Ajax'),
 
 		kn = require('Knoin/Knoin'),
 		AbstractView = require('Knoin/AbstractView')
@@ -26,8 +25,20 @@
 		this.adminDomain = ko.observable(Settings.settingsGet('AdminDomain'));
 		this.version = ko.observable(Settings.settingsGet('Version'));
 
-		this.adminManLoadingVisibility = Data.adminManLoadingVisibility;
 		this.capa = !!Settings.settingsGet('PremType');
+		this.community = RL_COMMUNITY;
+
+		this.adminManLoading = ko.computed(function () {
+			return '000' !== [
+				require('Stores/Admin/Domain').domains.loading() ? '1' : '0',
+				require('Stores/Admin/Plugin').plugins.loading() ? '1' : '0',
+				require('Stores/Admin/Package').packages.loading() ? '1' : '0'
+			].join('');
+		}, this);
+
+		this.adminManLoadingVisibility = ko.computed(function () {
+			return this.adminManLoading() ? 'visible' : 'hidden';
+		}, this).extend({'rateLimit': 300});
 
 		kn.constructorEnd(this);
 	}
@@ -38,7 +49,7 @@
 	PaneSettingsAdminView.prototype.logoutClick = function ()
 	{
 		Remote.adminLogout(function () {
-			require('App/Admin').loginAndLogoutReload(true);
+			require('App/Admin').loginAndLogoutReload(true, true);
 		});
 	};
 

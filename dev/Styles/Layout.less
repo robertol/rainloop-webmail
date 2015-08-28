@@ -139,7 +139,7 @@ html.ssm-state-tablet, html.ssm-state-mobile {
 	}
 
 	.b-compose.modal {
-		width: 700px;
+		width: 720px;
 	}
 
 	.b-contacts-content.modal {
@@ -156,7 +156,7 @@ html.ssm-state-tablet, html.ssm-state-mobile {
 html.ssm-state-tablet {
 
 	.b-compose.modal {
-		width: 700px;
+		width: 720px;
 	}
 
 	.b-contacts-content.modal {
@@ -205,6 +205,28 @@ html.rl-left-panel-disabled {
 	}
 }
 
+html.rl-left-panel-short {
+
+	#rl-left {
+		width: 60px !important;
+	}
+
+	#rl-right {
+		left: 60px !important;
+	}
+}
+
+html.rl-left-panel-none {
+
+	#rl-left {
+		width: 10px !important;
+	}
+
+	#rl-right {
+		left: 10px !important;
+	}
+}
+
 .ui-resizable-helper-w {
 	border-right: 5px solid #777;
 	border-right-color: rgba(255,255,255,0.7);
@@ -215,8 +237,9 @@ html.rl-left-panel-disabled {
 	border-bottom-color: rgba(0,0,0,0.3);
 }
 
-.ui-resizable-handle {
-	/*background: red;*/
+.ui-resizable-handle:hover {
+	background: #aaa;
+	background: rgba(255,255,255,0.5);
 }
 
 html.rl-no-preview-pane {

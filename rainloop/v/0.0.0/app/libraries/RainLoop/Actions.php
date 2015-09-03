@@ -213,12 +213,31 @@ class Actions
 		{
 			$this->oConfig = new \RainLoop\Config\Application();
 
+//			$bSave = defined('APP_INSTALLED_START');
+//			if (!$this->oConfig->Load())
+//			{
+//				$bSave = true;
+//			}
+//			else if (!$bSave)
+//			{
+//				$bSave = APP_VERSION !== $this->oConfig->Get('version', 'current');
+//			}
+
 			$bSave = defined('APP_INSTALLED_START');
-			if (!$this->oConfig->Load())
+
+			$bLoaded = $this->oConfig->Load();
+			if (!$bLoaded && !$bSave)
+			{
+				usleep(10000); // TODO
+				$bLoaded = $this->oConfig->Load();
+			}
+
+			if (!$bLoaded && !$this->oConfig->IsFileExists())
 			{
 				$bSave = true;
 			}
-			else if (!$bSave)
+
+			if ($bLoaded && !$bSave)
 			{
 				$bSave = APP_VERSION !== $this->oConfig->Get('version', 'current');
 			}
@@ -305,11 +324,9 @@ class Actions
 						$mResult = array();
 					}
 
-					// \RainLoop\Providers\Suggestions\ISuggestions
-//					$mResult[] = new \RainLoop\Providers\Suggestions\TestSuggestions();
-
 					if (\is_array($mResult) && \RainLoop\Utils::IsOwnCloud())
 					{
+						// \RainLoop\Providers\Suggestions\ISuggestions
 						$mResult[] = new \RainLoop\Providers\Suggestions\OwnCloudSuggestions();
 					}
 
@@ -1998,8 +2015,7 @@ class Actions
 	{
 		$this->Plugins()->RunHook('filter.login-credentials.step-1', array(&$sEmail, &$sPassword));
 
-		$sEmail = \MailSo\Base\Utils::StrToLowerIfAscii(
-			\MailSo\Base\Utils::Trim($sEmail));
+		$sEmail = \MailSo\Base\Utils::StrToLowerIfAscii(\MailSo\Base\Utils::Trim($sEmail));
 
 		if (false === \strpos($sEmail, '@'))
 		{
@@ -7011,8 +7027,10 @@ class Actions
 					$aResult = \array_merge($aResult, $aSuggestionsProviderResult);
 				}
 			}
+
 		}
 
+		$aResult = \RainLoop\Utils::RemoveSuggestionsdDuplicates($aResult);
 		if ($iLimit < \count($aResult))
 		{
 			$aResult = \array_slice($aResult, 0, $iLimit);
@@ -7020,6 +7038,7 @@ class Actions
 
 		$this->Plugins()->RunHook('ajax.suggestions-post', array(&$aResult, $sQuery, $oAccount, $iLimit));
 
+		$aResult = \RainLoop\Utils::RemoveSuggestionsdDuplicates($aResult);
 		if ($iLimit < \count($aResult))
 		{
 			$aResult = \array_slice($aResult, 0, $iLimit);

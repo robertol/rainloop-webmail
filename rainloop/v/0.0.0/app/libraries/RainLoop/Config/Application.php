@@ -61,6 +61,7 @@ class Application extends \RainLoop\Config\AbstractConfig
 
 				'title'							=> array('RainLoop Webmail', 'Text displayed as page title'),
 				'loading_description'			=> array('RainLoop', 'Text displayed on startup'),
+				'favicon_url'					=> array('', ''),
 
 				'theme'							=> array('Default', 'Theme used by default'),
 				'allow_themes'					=> array(true, 'Allow theme selection on settings screen'),
@@ -312,7 +313,7 @@ Enables caching in the system'),
 				'use_imap_force_selection' => array(false),
 				'use_imap_list_subscribe' => array(true),
 				'use_imap_thread' => array(true),
-				'use_imap_move' => array(true),
+				'use_imap_move' => array(false),
 				'use_imap_auth_plain' => array(false),
 				'use_imap_expunge_all_on_delete' => array(false),
 				'imap_forwarded_flag' => array('$Forwarded'),

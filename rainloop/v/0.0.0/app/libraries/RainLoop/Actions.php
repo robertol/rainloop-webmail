@@ -1132,6 +1132,18 @@ class Actions
 	}
 
 	/**
+	 * @param \RainLoop\Model\Account $oAccount
+	 */
+	public function LoggerAuthHelper($oAccount = null)
+	{
+		$sLine = $this->Config()->Get('logs', 'auth_logging_format', '');
+		if (!empty($sLine))
+		{
+			$this->LoggerAuth()->Write($this->compileLogParams($sLine, $oAccount));
+		}
+	}
+
+	/**
 	 * @return string
 	 */
 	private function getAdminToken()
@@ -1378,6 +1390,7 @@ class Actions
 			'Title' => 'RainLoop Webmail',
 			'LoadingDescription' => 'RainLoop',
 			'LoadingDescriptionEsc' => 'RainLoop',
+			'FaviconUrl' => '',
 			'LoginDescription' => '',
 			'LoginPowered' => true,
 			'LoginLogo' => '',
@@ -1472,6 +1485,7 @@ class Actions
 
 		$aResult['Title'] = $oConfig->Get('webmail', 'title', '');
 		$aResult['LoadingDescription'] = $oConfig->Get('webmail', 'loading_description', '');
+		$aResult['FaviconUrl'] = $oConfig->Get('webmail', 'favicon_url', '');
 
 		if ($oPremProvider)
 		{
@@ -1976,12 +1990,7 @@ class Actions
 		{
 			if ($bAuthLog)
 			{
-				$sLine = $this->Config()->Get('logs', 'auth_logging_format', '');
-				if (!empty($sLine))
-				{
-					$this->LoggerAuth()->Write($this->compileLogParams($sLine, $oAccount),
-						\MailSo\Log\Enumerations\Type::WARNING, 'IMAP');
-				}
+				$this->LoggerAuthHelper($oAccount);
 			}
 
 			if ($this->Config()->Get('labs', 'imap_show_login_alert', true))
@@ -2107,6 +2116,8 @@ class Actions
 
 		$this->Plugins()->RunHook('event.login-pre-login-provide', array());
 
+		$oAccount = null;
+
 		try
 		{
 			$oAccount = $this->LoginProvide($sEmail, $sLogin, $sPassword, $sSignMeToken, true);
@@ -2127,6 +2138,8 @@ class Actions
 		{
 			$this->loginErrorDelay();
 
+			$this->LoggerAuthHelper($oAccount);
+
 			throw $oException;
 		}
 
@@ -2145,6 +2158,8 @@ class Actions
 					if (empty($sAdditionalCode))
 					{
 						$this->Logger()->Write('TFA: Required Code for '.$oAccount->ParentEmailHelper().' account.');
+
+						$this->LoggerAuthHelper($oAccount);
 
 						throw new \RainLoop\Exceptions\ClientException(\RainLoop\Notifications::AccountTwoFactorAuthRequired);
 					}
@@ -2173,6 +2188,8 @@ class Actions
 						if (!$bGood && !$this->TwoFactorAuthProvider()->VerifyCode($aData['Secret'], $sAdditionalCode))
 						{
 							$this->loginErrorDelay();
+
+							$this->LoggerAuthHelper($oAccount);
 
 							throw new \RainLoop\Exceptions\ClientException(\RainLoop\Notifications::AccountTwoFactorAuthError);
 						}
@@ -3686,6 +3703,7 @@ class Actions
 
 		$this->setConfigFromParams($oConfig, 'Title', 'webmail', 'title', 'string');
 		$this->setConfigFromParams($oConfig, 'LoadingDescription', 'webmail', 'loading_description', 'string');
+		$this->setConfigFromParams($oConfig, 'FaviconUrl', 'webmail', 'favicon_url', 'string');
 
 		$this->setConfigFromParams($oConfig, 'TokenProtection', 'security', 'csrf_protection', 'bool');
 		$this->setConfigFromParams($oConfig, 'EnabledPlugins', 'plugins', 'enable', 'bool');
@@ -7030,7 +7048,7 @@ class Actions
 
 		}
 
-		$aResult = \RainLoop\Utils::RemoveSuggestionsdDuplicates($aResult);
+		$aResult = \RainLoop\Utils::RemoveSuggestionDuplicates($aResult);
 		if ($iLimit < \count($aResult))
 		{
 			$aResult = \array_slice($aResult, 0, $iLimit);
@@ -7038,7 +7056,7 @@ class Actions
 
 		$this->Plugins()->RunHook('ajax.suggestions-post', array(&$aResult, $sQuery, $oAccount, $iLimit));
 
-		$aResult = \RainLoop\Utils::RemoveSuggestionsdDuplicates($aResult);
+		$aResult = \RainLoop\Utils::RemoveSuggestionDuplicates($aResult);
 		if ($iLimit < \count($aResult))
 		{
 			$aResult = \array_slice($aResult, 0, $iLimit);
@@ -9574,8 +9592,9 @@ class Actions
 						};
 					}
 
-//					$this->Logger()->Write('---');
-//					$this->Logger()->Write($sHtml);
+					$sHtml = \preg_replace_callback('/<pre[^>]*>([\s\S\r\n\t]*)<\/pre>/mi', function ($aMatches) {
+						return \preg_replace('/[\r\n]+/', '<br />', $aMatches[0]);
+					}, $sHtml);
 
 					$mResult['Html'] = 0 === \strlen($sHtml) ? '' : \MailSo\Base\HtmlUtils::ClearHtml(
 						$sHtml, $bHasExternals, $mFoundedCIDs, $aContentLocationUrls, $mFoundedContentLocationUrls, false, false,

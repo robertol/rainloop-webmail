@@ -77,7 +77,8 @@ class MailClient
 	 * @param string $sLogin
 	 * @param string $sPassword
 	 * @param string $sProxyAuthUser = ''
-	 * @param bool $bUseAuthPlainIfSupported = false
+	 * @param bool $bUseAuthPlainIfSupported = true
+	 * @param bool $bUseAuthCramMd5IfSupported = true
 	 *
 	 * @return \MailSo\Mail\MailClient
 	 *
@@ -85,9 +86,10 @@ class MailClient
 	 * @throws \MailSo\Net\Exceptions\Exception
 	 * @throws \MailSo\Imap\Exceptions\LoginException
 	 */
-	public function Login($sLogin, $sPassword, $sProxyAuthUser = '', $bUseAuthPlainIfSupported = false)
+	public function Login($sLogin, $sPassword, $sProxyAuthUser = '',
+		$bUseAuthPlainIfSupported = true, $bUseAuthCramMd5IfSupported = true)
 	{
-		$this->oImapClient->Login($sLogin, $sPassword, $sProxyAuthUser, $bUseAuthPlainIfSupported);
+		$this->oImapClient->Login($sLogin, $sPassword, $sProxyAuthUser, $bUseAuthPlainIfSupported, $bUseAuthCramMd5IfSupported);
 		return $this;
 	}
 
@@ -170,7 +172,8 @@ class MailClient
 			\MailSo\Mime\Enumerations\Header::REPLY_TO,
 			\MailSo\Mime\Enumerations\Header::DATE,
 			\MailSo\Mime\Enumerations\Header::SUBJECT,
-			\MailSo\Mime\Enumerations\Header::CONTENT_TYPE
+			\MailSo\Mime\Enumerations\Header::CONTENT_TYPE,
+			\MailSo\Mime\Enumerations\Header::LIST_UNSUBSCRIBE,
 		), true);
 	}
 
@@ -211,6 +214,7 @@ class MailClient
 			\MailSo\Mime\Enumerations\Header::X_CONFIRM_READING_TO,
 			\MailSo\Mime\Enumerations\Header::AUTHENTICATION_RESULTS,
 			\MailSo\Mime\Enumerations\Header::X_DKIM_AUTHENTICATION_RESULTS,
+			\MailSo\Mime\Enumerations\Header::LIST_UNSUBSCRIBE,
 		), true);
 //
 //		return \MailSo\Imap\Enumerations\FetchType::ENVELOPE;
@@ -1410,7 +1414,10 @@ class MailClient
 		}
 
 		$sCriteriasResult = \trim($sCriteriasResult);
-		$sCriteriasResult .= ' UNDELETED';
+		if (\MailSo\Config::$MessageListUndeletedOnly)
+		{
+			$sCriteriasResult = \trim($sCriteriasResult.' UNDELETED');
+		}
 
 		$sFilter = \trim($sFilter);
 		if ('' !== $sFilter)
@@ -1421,7 +1428,7 @@ class MailClient
 		$sCriteriasResult = \trim($sCriteriasResult);
 		if ('' !== \MailSo\Config::$MessageListPermanentFilter)
 		{
-			$sCriteriasResult .= ' '.\MailSo\Config::$MessageListPermanentFilter;
+			$sCriteriasResult = \trim($sCriteriasResult.' '.\MailSo\Config::$MessageListPermanentFilter);
 		}
 
 		$sCriteriasResult = \trim($sCriteriasResult);
@@ -1863,7 +1870,7 @@ class MailClient
 			}
 		}
 
-		return $aResultUids;
+		return \is_array($aResultUids) ? $aResultUids : array();
 	}
 
 	/**
@@ -1962,7 +1969,7 @@ class MailClient
 			$bUseThreadSortIfSupported = false;
 		}
 
-		if (0 < $iMessageRealCount)
+		if (0 < $iMessageRealCount && !$bMessageListOptimization)
 		{
 			$mAllSortedUids = $this->GetUids($oCacher, '', $sFilter,
 				$oMessageCollection->FolderName, $oMessageCollection->FolderHash, $bUseSortIfSupported);
@@ -2059,11 +2066,53 @@ class MailClient
 
 				if (0 < \count($aUids))
 				{
-					$iOffset = (0 > $iOffset) ? 0 : $iOffset;
 					$aRequestUids = \array_slice($aUids, $iOffset, $iLimit);
-
 					$this->MessageListByRequestIndexOrUids($oMessageCollection, $aRequestUids, true);
 				}
+			}
+		}
+		else if (0 < $iMessageRealCount)
+		{
+			if ($this->oLogger)
+			{
+				$this->oLogger->Write('List optimization (count: '.$iMessageRealCount.
+					', limit:'.\MailSo\Config::$MessageListCountLimitTrigger.')');
+			}
+
+			$oMessageCollection->MessageCount = $iMessageRealCount;
+			$oMessageCollection->MessageUnseenCount = $iMessageUnseenCount;
+
+			if (0 < \strlen($sSearch) || $bUseFilter)
+			{
+				$aUids = $this->GetUids($oCacher, $sSearch, $sFilter,
+					$oMessageCollection->FolderName, $oMessageCollection->FolderHash);
+
+				if (0 < \count($aUids))
+				{
+					$oMessageCollection->MessageResultCount = \count($aUids);
+
+					$aRequestUids = \array_slice($aUids, $iOffset, $iLimit);
+					$this->MessageListByRequestIndexOrUids($oMessageCollection, $aRequestUids, true);
+				}
+				else
+				{
+					$oMessageCollection->MessageResultCount = 0;
+				}
+			}
+			else
+			{
+				$oMessageCollection->MessageResultCount = $iMessageRealCount;
+
+				if (1 < $iMessageRealCount)
+				{
+					$aRequestIndexes = \array_slice(array_reverse(range(1, $iMessageRealCount)), $iOffset, $iLimit);
+				}
+				else
+				{
+					$aRequestIndexes = \array_slice(array(1), $iOffset, $iLimit);
+				}
+
+				$this->MessageListByRequestIndexOrUids($oMessageCollection, $aRequestIndexes, false);
 			}
 		}
 
@@ -2135,10 +2184,10 @@ class MailClient
 
 			$aFilteredNames = array(
 				'inbox',
-				'sent', 'outbox', 'sentmail',
-				'drafts',
-				'junk', 'spam',
-				'trash', 'bin',
+				'sent', 'send', 'outbox', 'sentmail', 'sendmail',
+				'drafts', 'draft',
+				'junk', 'spam', 'spambucket',
+				'trash', 'bin', 'deleted',
 				'archives', 'archive', 'allmail', 'all',
 				'starred', 'flagged', 'important',
 				'contacts', 'chats'
@@ -2151,7 +2200,7 @@ class MailClient
 			foreach ($aMailFoldersHelper as $iIndex => /* @var $oImapFolder \MailSo\Mail\Folder */ $oFolder)
 			{
 				// mandatory folders
-				if ($oFolder && \in_array(\strtolower($oFolder->NameRaw()), $aFilteredNames))
+				if ($oFolder && \in_array(\str_replace(' ', '', \strtolower($oFolder->NameRaw())), $aFilteredNames))
 				{
 					$aNewMailFoldersHelper[] = $oFolder;
 					$aMailFoldersHelper[$iIndex] = null;

@@ -1,21 +1,7 @@
 
-(function () {
+class AbstractBoot
+{
+	bootstart() {/* no-empty */}
+}
 
-	'use strict';
-
-	/**
-	 * @constructor
-	 */
-	function AbstractBoot()
-	{
-
-	}
-
-	AbstractBoot.prototype.bootstart = function ()
-	{
-
-	};
-
-	module.exports = AbstractBoot;
-
-}());
+export {AbstractBoot, AbstractBoot as default};

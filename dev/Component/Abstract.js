@@ -1,76 +1,51 @@
 
-(function () {
+import $ from '$';
+import ko from 'ko';
+import {isUnd} from 'Common/Utils';
 
-	'use strict';
+class AbstractComponent
+{
+	disposable = [];
 
-	var
-		_ = require('_'),
-		ko = require('ko'),
-
-		Utils = require('Common/Utils')
-	;
-
-	/**
-	 * @constructor
-	 */
-	function AbstractComponent()
-	{
-		this.disposable = [];
-	}
-
-	/**
-	 * @type {Array}
-	 */
-	AbstractComponent.prototype.disposable = [];
-
-	AbstractComponent.prototype.dispose = function ()
-	{
-		_.each(this.disposable, function (fFuncToDispose) {
-			if (fFuncToDispose && fFuncToDispose.dispose)
+	dispose() {
+		this.disposable.forEach((funcToDispose) => {
+			if (funcToDispose && funcToDispose.dispose)
 			{
-				fFuncToDispose.dispose();
+				funcToDispose.dispose();
 			}
 		});
-	};
+	}
+}
 
-	/**
-	 * @param {*} ClassObject
-	 * @param {string} sTemplateID
-	 * @return {Object}
-	 */
-	AbstractComponent.componentExportHelper = function (ClassObject, sTemplateID) {
-		var oComponent = {
-			viewModel: {
-				createViewModel: function(oParams, oComponentInfo) {
+/**
+ * @param {*} ClassObject
+ * @param {string} templateID = ''
+ * @returns {Object}
+ */
+const componentExportHelper = (ClassObject, templateID = '') => ({
+	template: templateID ? {element: templateID} : '<b></b>',
+	viewModel: {
+		createViewModel: (params, componentInfo) => {
 
-					oParams = oParams || {};
-					oParams.element = null;
+			params = params || {};
+			params.element = null;
 
-					if (oComponentInfo.element)
-					{
-						oParams.component = oComponentInfo;
-						oParams.element = $(oComponentInfo.element);
+			if (componentInfo && componentInfo.element)
+			{
+				params.component = componentInfo;
+				params.element = $(componentInfo.element);
 
-						require('Common/Translator').i18nToNodes(oParams.element);
+				require('Common/Translator').i18nToNodes(params.element);
 
-						if (!Utils.isUnd(oParams.inline) && ko.unwrap(oParams.inline))
-						{
-							oParams.element.css('display', 'inline-block');
-						}
-					}
-
-					return new ClassObject(oParams);
+				if (!isUnd(params.inline) && ko.unwrap(params.inline))
+				{
+					params.element.css('display', 'inline-block');
 				}
 			}
-		};
 
-		oComponent['template'] = sTemplateID ? {
-			element: sTemplateID
-		} : '<b></b>';
+			return new ClassObject(params);
+		}
+	}
+});
 
-		return oComponent;
-	};
-
-	module.exports = AbstractComponent;
-
-}());
+export {AbstractComponent, componentExportHelper};

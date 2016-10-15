@@ -1,47 +1,38 @@
 
-(function () {
+import ko from 'ko';
+import {Focused, KeyState} from 'Common/Enums';
+import {keyScope} from 'Common/Globals';
+import {isNonEmptyArray} from 'Common/Utils';
 
-	'use strict';
+import * as Settings from 'Storage/Settings';
 
-	var
-		ko = require('ko'),
+import {AbstractAppStore} from 'Stores/AbstractApp';
 
-		Enums = require('Common/Enums'),
-		Globals = require('Common/Globals'),
-		Utils = require('Common/Utils'),
-
-		Settings = require('Storage/Settings'),
-
-		AppStore = require('Stores/App')
-	;
-
-	/**
-	 * @constructor
-	 */
-	function AppUserStore()
-	{
-		AppStore.call(this);
+class AppUserStore extends AbstractAppStore
+{
+	constructor() {
+		super();
 
 		this.currentAudio = ko.observable('');
 
-		this.focusedState = ko.observable(Enums.Focused.None);
+		this.focusedState = ko.observable(Focused.None);
 
-		this.focusedState.subscribe(function (mValue) {
-
-			switch (mValue)
+		this.focusedState.subscribe((value) => {
+			switch (value)
 			{
-				case Enums.Focused.MessageList:
-					Globals.keyScope(Enums.KeyState.MessageList);
+				case Focused.MessageList:
+					keyScope(KeyState.MessageList);
 					break;
-				case Enums.Focused.MessageView:
-					Globals.keyScope(Enums.KeyState.MessageView);
+				case Focused.MessageView:
+					keyScope(KeyState.MessageView);
 					break;
-				case Enums.Focused.FolderList:
-					Globals.keyScope(Enums.KeyState.FolderList);
+				case Focused.FolderList:
+					keyScope(KeyState.FolderList);
+					break;
+				default:
 					break;
 			}
-
-		}, this);
+		});
 
 		this.projectHash = ko.observable('');
 		this.threadsAllowed = ko.observable(false);
@@ -59,9 +50,9 @@
 		this.devPassword = '';
 	}
 
-	AppUserStore.prototype.populate = function()
-	{
-		AppStore.prototype.populate.call(this);
+	populate() {
+
+		super.populate();
 
 		this.projectHash(Settings.settingsGet('ProjectHash'));
 
@@ -70,13 +61,12 @@
 
 		this.contactsIsAllowed(!!Settings.settingsGet('ContactsIsAllowed'));
 
-		var mAttachmentsActions = Settings.settingsGet('AttachmentsActions');
-		this.attachmentsActions(Utils.isNonEmptyArray(mAttachmentsActions) ? mAttachmentsActions : []);
+		const attachmentsActions = Settings.appSettingsGet('attachmentsActions');
+		this.attachmentsActions(isNonEmptyArray(attachmentsActions) ? attachmentsActions : []);
 
 		this.devEmail = Settings.settingsGet('DevEmail');
 		this.devPassword = Settings.settingsGet('DevPassword');
-	};
+	}
+}
 
-	module.exports = new AppUserStore();
-
-}());
+export default new AppUserStore();

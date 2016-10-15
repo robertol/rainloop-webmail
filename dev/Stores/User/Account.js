@@ -1,71 +1,51 @@
 
-(function () {
+import ko from 'ko';
+import _ from '_';
+import {Magics} from 'Common/Enums';
+import * as Settings from 'Storage/Settings';
 
-	'use strict';
-
-	var
-		_ = require('_'),
-		ko = require('ko'),
-
-		Settings = require('Storage/Settings')
-	;
-
-	/**
-	 * @constructor
-	 */
-	function AccountUserStore()
-	{
+class AccountUserStore
+{
+	constructor() {
 		this.email = ko.observable('');
 		this.parentEmail = ko.observable('');
-//		this.incLogin = ko.observable('');
-//		this.outLogin = ko.observable('');
 
 		this.signature = ko.observable('');
 
 		this.accounts = ko.observableArray([]);
-		this.accounts.loading = ko.observable(false).extend({'throttle': 100});
+		this.accounts.loading = ko.observable(false).extend({throttle: Magics.Time100ms});
 
 		this.computers();
 	}
 
-	AccountUserStore.prototype.computers = function ()
-	{
-		this.accountsEmails = ko.computed(function () {
-			return _.compact(_.map(this.accounts(), function (oItem) {
-				return oItem ? oItem.email : null;
-			}));
-		}, this);
+	computers() {
+		this.accountsEmails = ko.computed(
+			() => _.compact(_.map(this.accounts(), (item) => (item ? item.email : null))));
 
-		this.accountsUnreadCount = ko.computed(function () {
-
-			var iResult = 0;
-
-//			_.each(this.accounts(), function (oItem) {
-//				if (oItem)
+		this.accountsUnreadCount = ko.computed(() => 0);
+//		this.accountsUnreadCount = ko.computed(() => {
+//			let result = 0;
+//			_.each(this.accounts(), (item) => {
+//				if (item)
 //				{
-//					iResult += oItem.count();
+//					result += item.count();
 //				}
 //			});
+//			return result;
+//		});
+	}
 
-			return iResult;
-
-		}, this);
-	};
-
-	AccountUserStore.prototype.populate = function ()
-	{
+	populate() {
 		this.email(Settings.settingsGet('Email'));
 		this.parentEmail(Settings.settingsGet('ParentEmail'));
-	};
+	}
 
 	/**
-	 * @return {boolean}
+	 * @returns {boolean}
 	 */
-	AccountUserStore.prototype.isRootAccount = function ()
-	{
+	isRootAccount() {
 		return '' === this.parentEmail();
-	};
+	}
+}
 
-	module.exports = new AccountUserStore();
-
-}());
+export default new AccountUserStore();

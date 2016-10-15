@@ -1,56 +1,37 @@
 
-(function () {
+import _ from '_';
+import Promise from 'Promise';
+import {isArray} from 'Common/Utils';
 
-	'use strict';
+class AbstractBasicPromises
+{
+	oPromisesStack = {};
 
-	var
-		_ = require('_'),
-		Q = require('Q'),
-
-		Utils = require('Common/Utils')
-	;
-
-	/**
-	* @constructor
-	*/
-	function AbstractBasicPromises()
-	{
-		this.oPromisesStack = {};
-	}
-
-	AbstractBasicPromises.prototype.func = function (fFunc)
-	{
+	func(fFunc) {
 		fFunc();
 		return this;
-	};
+	}
 
-	AbstractBasicPromises.prototype.fastResolve = function (mData)
-	{
-		var oDeferred = Q.defer();
-		oDeferred.resolve(mData);
-		return oDeferred.promise;
-	};
+	fastResolve(mData) {
+		return Promise.resolve(mData);
+	}
 
-	AbstractBasicPromises.prototype.fastReject = function (mData)
-	{
-		var oDeferred = Q.defer();
-		oDeferred.reject(mData);
-		return oDeferred.promise;
-	};
+	fastReject(mData) {
+		return Promise.reject(mData);
+	}
 
-	AbstractBasicPromises.prototype.setTrigger = function (mTrigger, bValue)
-	{
-		if (mTrigger)
+	setTrigger(trigger, value) {
+		if (trigger)
 		{
-			_.each(Utils.isArray(mTrigger) ? mTrigger : [mTrigger], function (fTrigger) {
+			value = !!value;
+			_.each(isArray(trigger) ? trigger : [trigger], (fTrigger) => {
 				if (fTrigger)
 				{
-					fTrigger(!!bValue);
+					fTrigger(value);
 				}
 			});
 		}
-	};
+	}
+}
 
-	module.exports = AbstractBasicPromises;
-
-}());
+export {AbstractBasicPromises, AbstractBasicPromises as default};

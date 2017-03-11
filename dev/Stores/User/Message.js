@@ -14,7 +14,8 @@ import {
 import {
 	trim, isNormal, isArray, inArray,
 	pInt, pString, plainToHtml,
-	windowResize, findEmailAndLinks
+	windowResize, findEmailAndLinks,
+	getRealHeight
 } from 'Common/Utils';
 
 import {
@@ -148,8 +149,10 @@ class MessageUserStore
 		this.messageListCheckedOrSelected = ko.computed(() => {
 			const
 				checked = this.messageListChecked(),
-				selectedMessage = this.selectorMessageSelected();
-			return _.union(checked, selectedMessage ? [selectedMessage] : []);
+				selectedMessage = this.selectorMessageSelected(),
+				focusedMessage = this.selectorMessageFocused();
+
+			return _.union(checked, selectedMessage ? [selectedMessage] : [], focusedMessage ? [focusedMessage] : []);
 		});
 
 		this.messageListCheckedOrSelectedUidsWithSubMails = ko.computed(() => {
@@ -303,7 +306,7 @@ class MessageUserStore
 	 * @param {string} fromFolderFullNameRaw
 	 * @param {Array} uidForRemove
 	 * @param {string=} toFolderFullNameRaw = ''
-	 * @param {boolean=} bCocopypy = false
+	 * @param {boolean=} copy = false
 	 */
 	removeMessagesFromList(fromFolderFullNameRaw, uidForRemove, toFolderFullNameRaw = '', copy = false) {
 
@@ -459,7 +462,14 @@ class MessageUserStore
 			{
 				$oList.each(function() {
 					const $this = $(this); // eslint-disable-line no-invalid-this
-					if ('' !== trim($this.text()))
+
+					let h = $this.height();
+					if (0 === h)
+					{
+						h = getRealHeight($this);
+					}
+
+					if ('' !== trim($this.text()) && (0 === h || 100 < h))
 					{
 						$this.addClass('rl-bq-switcher hidden-bq');
 						$('<span class="rlBlockquoteSwitcher"><i class="icon-ellipsis" /></span>')
@@ -477,13 +487,14 @@ class MessageUserStore
 	}
 
 	/**
-	 * @param {Object} oMessageTextBody
+	 * @param {Object} messageTextBody
+	 * @param {Object} message
 	 */
-	initOpenPgpControls(oMessageTextBody, oMessage) {
-		if (oMessageTextBody && oMessageTextBody.find)
+	initOpenPgpControls(messageTextBody, message) {
+		if (messageTextBody && messageTextBody.find)
 		{
-			oMessageTextBody.find('.b-plain-openpgp:not(.inited)').each(function() {
-				PgpStore.initMessageBodyControls($(this), oMessage); // eslint-disable-line no-invalid-this
+			messageTextBody.find('.b-plain-openpgp:not(.inited)').each(function() {
+				PgpStore.initMessageBodyControls($(this), message); // eslint-disable-line no-invalid-this
 			});
 		}
 	}
@@ -657,7 +668,7 @@ class MessageUserStore
 				if (message.unseen() || message.hasUnseenSubMessage())
 				{
 					getApp().messageListAction(
-						message.folderFullNameRaw, message.uid, MessageSetAction.SetSeen, [message]);
+						message.folderFullNameRaw, MessageSetAction.SetSeen, [message]);
 				}
 
 				if (isNew)
@@ -763,7 +774,7 @@ class MessageUserStore
 	}
 
 	/**
-	 * @param {Array} aList
+	 * @param {Array} list
 	 * @returns {string}
 	 */
 	calculateMessageListHash(list) {

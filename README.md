@@ -11,7 +11,7 @@ Information about installing the product, check the [documentation page](http://
 
 ## Attention
 
-This is **NOT** a stable version of RainLoop Webmail.
+This is a developer version of RainLoop Webmail.
 It's not recommended to use in production environment.
 
 ## License
@@ -20,4 +20,4 @@ It's not recommended to use in production environment.
 **GNU AFFERO GENERAL PUBLIC LICENSE Version 3 (AGPL)**.
 http://www.gnu.org/licenses/agpl-3.0.html
 
-Copyright (c) 2016 Rainloop Team
+Copyright (c) 2017 Rainloop Team

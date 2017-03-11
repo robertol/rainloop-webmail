@@ -20,7 +20,8 @@ import {
 import {
 	bMobileDevice,
 	popupVisibility,
-	leftPanelDisabled
+	leftPanelDisabled,
+	moveAction
 } from 'Common/Globals';
 
 import {
@@ -76,6 +77,7 @@ class MessageListMailBoxUserView extends AbstractViewNext
 		this.iGoToUpUpOrDownDownTimeout = 0;
 
 		this.mobile = !!Settings.appSettingsGet('mobile');
+		this.newMoveToFolder = AppStore.newMoveToFolder;
 
 		this.allowReload = !!Settings.capa(Capa.Reload);
 		this.allowSearch = !!Settings.capa(Capa.Search);
@@ -350,6 +352,30 @@ class MessageListMailBoxUserView extends AbstractViewNext
 	@command(canBeMovedHelper)
 	moveCommand() {} // eslint-disable-line no-empty-function
 
+	@command(canBeMovedHelper)
+	moveNewCommand(vm, event) {
+		if (this.newMoveToFolder() && this.mobileCheckedStateShow())
+		{
+			if (vm && event && event.preventDefault) {
+				event.preventDefault();
+				if (event.stopPropagation) {
+					event.stopPropagation();
+				}
+			}
+
+			if (moveAction())
+			{
+				AppStore.focusedState(Focused.MessageList);
+				moveAction(false);
+			}
+			else
+			{
+				AppStore.focusedState(Focused.FolderList);
+				moveAction(true);
+			}
+		}
+	}
+
 	hideLeft(item, event) {
 		event.preventDefault();
 		event.stopPropagation();
@@ -513,23 +539,26 @@ class MessageListMailBoxUserView extends AbstractViewNext
 
 	/**
 	 * @param {string} sFolderFullNameRaw
-	 * @param {string|bool} mUid
 	 * @param {number} iSetAction
 	 * @param {Array=} aMessages = null
 	 * @returns {void}
 	 */
-	setAction(sFolderFullNameRaw, mUid, iSetAction, aMessages) {
-		getApp().messageListAction(sFolderFullNameRaw, mUid, iSetAction, aMessages);
+	setAction(sFolderFullNameRaw, iSetAction, aMessages) {
+		getApp().messageListAction(sFolderFullNameRaw, iSetAction, aMessages);
 	}
 
 	/**
 	 * @param {string} sFolderFullNameRaw
 	 * @param {number} iSetAction
+	 * @param {string} sThreadUid = ''
 	 * @returns {void}
 	 */
-	setActionForAll(sFolderFullNameRaw, iSetAction) {
+	setActionForAll(sFolderFullNameRaw, iSetAction, sThreadUid = '') {
 		if ('' !== sFolderFullNameRaw)
 		{
+			let cnt = 0;
+			const uids = [];
+
 			let folder = getFolderFromCacheList(sFolderFullNameRaw);
 			if (folder)
 			{
@@ -540,27 +569,64 @@ class MessageListMailBoxUserView extends AbstractViewNext
 						if (folder)
 						{
 							_.each(MessageStore.messageList(), (message) => {
+								if (message.unseen())
+								{
+									cnt += 1;
+								}
+
 								message.unseen(false);
+								uids.push(message.uid);
 							});
 
-							folder.messageCountUnread(0);
+							if (sThreadUid)
+							{
+								folder.messageCountUnread(folder.messageCountUnread() - cnt);
+								if (0 > folder.messageCountUnread())
+								{
+									folder.messageCountUnread(0);
+								}
+							}
+							else
+							{
+								folder.messageCountUnread(0);
+							}
+
 							clearMessageFlagsFromCacheByFolder(sFolderFullNameRaw);
 						}
 
-						Remote.messageSetSeenToAll(noop, sFolderFullNameRaw, true);
+						Remote.messageSetSeenToAll(noop, sFolderFullNameRaw, true, sThreadUid ? uids : null);
 						break;
 					case MessageSetAction.UnsetSeen:
 						folder = getFolderFromCacheList(sFolderFullNameRaw);
 						if (folder)
 						{
 							_.each(MessageStore.messageList(), (message) => {
+								if (!message.unseen())
+								{
+									cnt += 1;
+								}
+
 								message.unseen(true);
+								uids.push(message.uid);
 							});
 
-							folder.messageCountUnread(folder.messageCountAll());
+							if (sThreadUid)
+							{
+								folder.messageCountUnread(folder.messageCountUnread() + cnt);
+								if (folder.messageCountAll() < folder.messageCountUnread())
+								{
+									folder.messageCountUnread(folder.messageCountAll());
+								}
+							}
+							else
+							{
+								folder.messageCountUnread(folder.messageCountAll());
+							}
+
 							clearMessageFlagsFromCacheByFolder(sFolderFullNameRaw);
 						}
-						Remote.messageSetSeenToAll(noop, sFolderFullNameRaw, false);
+
+						Remote.messageSetSeenToAll(noop, sFolderFullNameRaw, false, sThreadUid ? uids : null);
 						break;
 					// no default
 				}
@@ -571,26 +637,26 @@ class MessageListMailBoxUserView extends AbstractViewNext
 	}
 
 	listSetSeen() {
-		this.setAction(FolderStore.currentFolderFullNameRaw(), true,
+		this.setAction(FolderStore.currentFolderFullNameRaw(),
 			MessageSetAction.SetSeen, MessageStore.messageListCheckedOrSelected());
 	}
 
 	listSetAllSeen() {
-		this.setActionForAll(FolderStore.currentFolderFullNameRaw(), MessageSetAction.SetSeen);
+		this.setActionForAll(FolderStore.currentFolderFullNameRaw(), MessageSetAction.SetSeen, this.messageListEndThreadUid());
 	}
 
 	listUnsetSeen() {
-		this.setAction(FolderStore.currentFolderFullNameRaw(), true,
+		this.setAction(FolderStore.currentFolderFullNameRaw(),
 			MessageSetAction.UnsetSeen, MessageStore.messageListCheckedOrSelected());
 	}
 
 	listSetFlags() {
-		this.setAction(FolderStore.currentFolderFullNameRaw(), true,
+		this.setAction(FolderStore.currentFolderFullNameRaw(),
 			MessageSetAction.SetFlag, MessageStore.messageListCheckedOrSelected());
 	}
 
 	listUnsetFlags() {
-		this.setAction(FolderStore.currentFolderFullNameRaw(), true,
+		this.setAction(FolderStore.currentFolderFullNameRaw(),
 			MessageSetAction.UnsetFlag, MessageStore.messageListCheckedOrSelected());
 	}
 
@@ -601,12 +667,12 @@ class MessageListMailBoxUserView extends AbstractViewNext
 			const checkedUids = _.map(checked, (message) => message.uid);
 			if (0 < checkedUids.length && -1 < inArray(currentMessage.uid, checkedUids))
 			{
-				this.setAction(currentMessage.folderFullNameRaw, true, currentMessage.flagged() ?
+				this.setAction(currentMessage.folderFullNameRaw, currentMessage.flagged() ?
 					MessageSetAction.UnsetFlag : MessageSetAction.SetFlag, checked);
 			}
 			else
 			{
-				this.setAction(currentMessage.folderFullNameRaw, true, currentMessage.flagged() ?
+				this.setAction(currentMessage.folderFullNameRaw, currentMessage.flagged() ?
 					MessageSetAction.UnsetFlag : MessageSetAction.SetFlag, [currentMessage]);
 			}
 		}
@@ -619,12 +685,12 @@ class MessageListMailBoxUserView extends AbstractViewNext
 			if (isUnd(bFlag))
 			{
 				const flagged = _.filter(checked, (message) => message.flagged());
-				this.setAction(checked[0].folderFullNameRaw, true,
+				this.setAction(checked[0].folderFullNameRaw,
 					checked.length === flagged.length ? MessageSetAction.UnsetFlag : MessageSetAction.SetFlag, checked);
 			}
 			else
 			{
-				this.setAction(checked[0].folderFullNameRaw, true,
+				this.setAction(checked[0].folderFullNameRaw,
 					!bFlag ? MessageSetAction.UnsetFlag : MessageSetAction.SetFlag, checked);
 			}
 		}
@@ -637,12 +703,12 @@ class MessageListMailBoxUserView extends AbstractViewNext
 			if (isUnd(seen))
 			{
 				const unseen = _.filter(checked, (message) => message.unseen());
-				this.setAction(checked[0].folderFullNameRaw, true,
+				this.setAction(checked[0].folderFullNameRaw,
 					0 < unseen.length ? MessageSetAction.SetSeen : MessageSetAction.UnsetSeen, checked);
 			}
 			else
 			{
-				this.setAction(checked[0].folderFullNameRaw, true,
+				this.setAction(checked[0].folderFullNameRaw,
 					seen ? MessageSetAction.SetSeen : MessageSetAction.UnsetSeen, checked);
 			}
 		}
@@ -676,7 +742,7 @@ class MessageListMailBoxUserView extends AbstractViewNext
 
 	clearListIsVisible() {
 		return '' === this.messageListSearchDesc() && '' === this.messageListError() &&
-			'' === MessageStore.messageListEndThreadUid() &&
+			'' === this.messageListEndThreadUid() &&
 			0 < this.messageList().length && (this.isSpamFolder() || this.isTrashFolder());
 	}
 
@@ -829,7 +895,16 @@ class MessageListMailBoxUserView extends AbstractViewNext
 		{
 			// move
 			key('m', KeyState.MessageList, () => {
-				this.moveDropdownTrigger(true);
+
+				if (this.newMoveToFolder())
+				{
+					this.moveNewCommand();
+				}
+				else
+				{
+					this.moveDropdownTrigger(true);
+				}
+
 				return false;
 			});
 		}

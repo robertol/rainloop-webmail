@@ -21,6 +21,9 @@ export const $body = $('body');
 
 export const $div = $('<div></div>');
 
+export const $hcont = $('<div></div>');
+$hcont.attr('area', 'hidden').css({position: 'absolute', left: -5000}).appendTo($body);
+
 export const startMicrotime = (new window.Date()).getTime();
 
 /**
@@ -122,6 +125,9 @@ export const htmlEditorDefaultConfig = {
 	'ignoreEmptyParagraph': true,
 	'disableNativeSpellChecker': false,
 
+	'colorButton_enableAutomatic': false,
+	'colorButton_enableMore': true,
+
 	'font_defaultLabel': 'Arial',
 	'fontSize_defaultLabel': '13',
 	'fontSize_sizes': '10/10px;12/12px;13/13px;14/14px;16/16px;18/18px;20/20px;24/24px;28/28px;36/36px;48/48px'
@@ -180,15 +186,28 @@ if (bAllowPdfPreview && window.navigator && window.navigator.mimeTypes)
 
 export {bAllowPdfPreview};
 
-export const aViewModels = {
+export const VIEW_MODELS = {
 	settings: [],
 	'settings-removed': [],
 	'settings-disabled': []
 };
 
+export const moveAction = ko.observable(false);
 export const leftPanelDisabled = ko.observable(false);
 export const leftPanelType = ko.observable('');
 export const leftPanelWidth = ko.observable(0);
+
+leftPanelDisabled.subscribe((value) => {
+	if (value && moveAction()) {
+		moveAction(false);
+	}
+});
+
+moveAction.subscribe((value) => {
+	if (value && leftPanelDisabled()) {
+		leftPanelDisabled(false);
+	}
+});
 
 // popups
 export const popupVisibilityNames = ko.observableArray([]);

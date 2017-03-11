@@ -16,7 +16,8 @@ import {
 	$html,
 	leftPanelDisabled,
 	keyScopeReal,
-	useKeyboardShortcuts
+	useKeyboardShortcuts,
+	moveAction
 } from 'Common/Globals';
 
 import {
@@ -89,6 +90,8 @@ class MessageViewMailBoxUserView extends AbstractViewNext
 		this.bodyBackgroundColor = ko.observable('');
 
 		this.pswp = null;
+
+		this.moveAction = moveAction;
 
 		this.allowComposer = !!Settings.capa(Capa.Composer);
 		this.allowMessageActions = !!Settings.capa(Capa.MessageActions);
@@ -687,7 +690,7 @@ class MessageViewMailBoxUserView extends AbstractViewNext
 				const message = self.message();
 				if (message)
 				{
-					getApp().messageListAction(message.folderFullNameRaw, message.uid,
+					getApp().messageListAction(message.folderFullNameRaw,
 						message.flagged() ? MessageSetAction.UnsetFlag : MessageSetAction.SetFlag, [message]);
 				}
 			})
@@ -695,8 +698,7 @@ class MessageViewMailBoxUserView extends AbstractViewNext
 				const message = ko.dataFor(this); // eslint-disable-line no-invalid-this
 				if (message && message.folder && message.uid)
 				{
-					getApp().messageListAction(
-						message.folder, message.uid,
+					getApp().messageListAction(message.folder,
 						message.flagged() ? MessageSetAction.UnsetFlag : MessageSetAction.SetFlag, [message]);
 				}
 
